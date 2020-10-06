@@ -1,0 +1,178 @@
+---
+title: "Data visualisation I"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- SE@K (Statistical Ecology @ Kent), University of Kent
+date:
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Introduction
+
+
+## Introduction I
+
+- Data visualization is part art and part science. The challenge is to get the art right without getting the science wrong, and vice-versa. 
+- A data visualization first and foremost has to accurately convey the data. 
+- At the same time, a data visualization should be aesthetically pleasing. Good visual presentations tend to enhance the message of the visualization.
+
+## Introduction II
+
+To provide a simple visual guideline of which examples should be emulated and which should be avoided, I am labeling problematic figures as “ugly,” “bad,” or “wrong”:
+
+* Ugly - A figure that has aesthetic problems but otherwise is clear and informative
+* Bad - A figure that has problems related to perception; it may be unclear, confusing, overly complicated, or deceiving
+* Wrong - A figure that has problems related to mathematics; it is objectively incorrect
+
+
+## Introduction-Example
+
+```{r message=FALSE, warning=FALSE, out.width="75%", fig.align = 'center'}
+library("ggplot2")
+library("patchwork")
+library("extrafont")
+df <- data.frame(
+  type = c("A", "B", "C"),
+  value = c(5, 2, 4),
+  expand = c(5, 2.5, 4.5)
+)
+p1 <- ggplot(df, aes(type, value)) + 
+  geom_col(fill = "#56B4E9", width = 0.65, alpha = 0.9) +
+  scale_y_continuous(limits = c(0, 5.2), expand = c(0, 0)) +
+  scale_x_discrete(name = NULL) +
+  coord_cartesian(clip = "off") +
+  #theme_dviz_hgrid(12) +
+  theme(
+    axis.line = element_blank(),
+    plot.margin = margin(18, 12, 0, 0)
+  )
+p2 <- ggplot(df, aes(type, value)) + 
+  geom_col(fill = c("#CCFF00FF", "#00FFFFFF", "#CC00FFFF"), width = 0.75) +
+  scale_y_continuous(limits = c(0, 5.2), expand = c(0, 0)) +
+  scale_x_discrete(name = NULL) +
+  coord_cartesian(clip = "off") +
+  #theme_dviz_hgrid(12) +
+  theme(
+    axis.line = element_blank(),
+    axis.title = element_text(face = "bold", size = 15),
+    axis.text.x = element_text(face = "bold", size = 10),
+    axis.text.y = element_text(face = "italic", size = 13),
+    panel.grid = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    plot.margin = margin(18, 12, 1.5, 1.5)
+  )
+p3 <- ggplot(df, aes(type, value)) + 
+  geom_col(fill = "#56B4E9", width = 0.65, alpha = 0.9) +
+  geom_point(aes(y = expand), shape = NA) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_discrete(name = NULL) +
+  facet_wrap(~type, scales = "free") +
+  coord_cartesian(clip = "off") +
+  #theme_dviz_hgrid(12) +
+  theme(
+    axis.line = element_blank(),
+    strip.text = element_blank(),
+    plot.margin = margin(18, 12, 1.5, 1.5)
+  )
+p4 <- ggplot(df, aes(type, value)) + 
+  geom_col(fill = "#56B4E9", width = 0.65, alpha = 0.9) +
+  coord_cartesian(xlim = c(0.4, 3.6), ylim = c(1, 6.2), expand = FALSE, clip = "on") +
+  scale_y_continuous(breaks = 2:4, name = "", labels = c("", "", "")) +
+  scale_x_discrete(name = NULL) +
+  #theme_dviz_hgrid(12) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    plot.margin = margin(18, 12, 1.5, 1.5)
+  )
+p1+p2+p3+p4
+```
+
+# Introduction to ggplot
+
+## A simple example
+
+- The functions in the ggplot2 package build up a graph in layers. 
+- We’ll build a a complex graph by starting with a simple graph and adding additional elements, one at a time.
+#
+#
+
+We are going to download data from the III Forest Inventory (Murcia)
+
+```{r echo=TRUE}
+##load data
+library(curl)
+FI_Murcia <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/FI_Murcia.csv"))
+attach(FI_Murcia)
+names(FI_Murcia)
+```
+
+## 
+
+```{r, echo=TRUE, fig.align='center', fig.cap="Map variables", message=FALSE, warning=FALSE, out.width="75%"}
+##specify dataset and mapping
+library(ggplot2) 
+ggplot(data = FI_Murcia,
+  mapping = aes(x = Diameter1, y = Height))
+```
+We need to specify what we wanted placed on the graph
+
+##  
+
+```{r, echo= TRUE, message=FALSE, warning=FALSE, out.width="75%", fig.align = 'center'}
+##add geom_point
+library(ggplot2) 
+ggplot(data = FI_Murcia,
+  mapping = aes(x = Diameter1, y = Height))+
+  geom_point()
+```
+
+##  
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE, out.width="75%", fig.align = 'center'}
+##make points blue, larger, and semi-transparent
+ggplot(data = FI_Murcia,
+mapping = aes(x = Diameter1, y = Height)) +
+  geom_point(color = "cornflowerblue", alpha = .7,
+  size = 3)
+```
+
+##  
+
+```{r echo=TRUE, fig.align='center', message=FALSE, warning=FALSE, out.width="75%"}
+##add a line of best fit
+ggplot(data = FI_Murcia,
+mapping = aes(x = Diameter1, y = Height)) +
+  geom_point(color = "cornflowerblue", alpha = .7, size = 3) + 
+  geom_smooth(method = "lm")
+```
+
+## 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, out.width="75%", fig.align='center'}
+##indicate species using color
+FI_Murcia_sub = subset(FI_Murcia, Species == c("Castanea sativa", "Fagus sylvatica", "Pinus nigra", "Quercus robur"))
+ggplot(data = FI_Murcia_sub, 
+mapping = aes(x = Diameter1, y = Height, color = Species)) + 
+  geom_point(alpha = .7, size = 3) + 
+  geom_smooth(method = "lm", se = FALSE, size = 1.5)
+```
+
+## 
+
+```{r echo=TRUE, fig.align='center', message=FALSE, warning=FALSE, out.width="75%"}
+# reproduce plot for each species
+ggplot(data = FI_Murcia_sub, 
+mapping = aes(x = Diameter1, y = Height)) + 
+  geom_point(alpha = .7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(breaks = seq(0, 2, 0.5)) + 
+  scale_y_continuous(breaks = seq(0, 60, 10)) + 
+  scale_color_manual(values = c("indianred3","cornflowerblue")) +
+  facet_wrap(~Species)
+```
+
+# Now it is your turn! With the data available create the most _horrible plot_ using ggplot
