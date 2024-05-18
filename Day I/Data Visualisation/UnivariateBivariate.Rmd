@@ -1,0 +1,361 @@
+---
+title: "Data visualisation II  \nUnivariate & Bivariate "
+author:
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+#date: "null"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Univariate Graphs - Categorical
+
+```{r include=FALSE}
+library(curl)
+FI_Murcia <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/FI_Murcia.csv"))
+attach(FI_Murcia)
+FI_Murcia_sub = subset(FI_Murcia, Species == c("Castanea sativa", "Fagus sylvatica", "Pinus nigra", "Quercus robur"))
+```
+
+##   
+```{r echo=TRUE,fig.asp=2/3}
+library(ggplot2)
+# plot the distribution of species
+ggplot(FI_Murcia_sub, aes(x = Species)) + 
+  geom_bar()
+```
+
+##  
+```{r echo=TRUE,fig.asp=2/3}
+# plot the distribution of race with modified colors and labels
+ggplot(FI_Murcia_sub, aes(x = Species)) + 
+  geom_bar(fill = "cornflowerblue", color="black") + 
+  labs(x = "Species", y = "Frequency", 
+       title = "Individuals by species")
+```
+
+##  
+```{r echo=TRUE,fig.asp=2/3}
+# plot the distribution as percentages
+ggplot(FI_Murcia_sub, aes(x = Species, y = ..count.. / sum(..count..))) + 
+  geom_bar() + labs(x = "Species", y = "Percent", 
+                    title = "Individuals by species") + 
+  scale_y_continuous(labels = scales::percent)
+```
+
+##     
+```{r echo=TRUE,fig.asp=2/3}
+# calculate number of participants in # each race category
+library(dplyr)
+plotdata <- FI_Murcia_sub %>%
+  count(Species)
+plotdata
+```
+
+##  
+```{r echo=TRUE,fig.asp=2/3}
+# plot the bars in ascending order
+ggplot(plotdata, aes(x = reorder(Species, n), y = n)) + 
+  geom_bar(stat = "identity") +
+  labs(x = "Species", y = "Frequency", 
+       title = "Individuals by species")
+```
+
+##  
+```{r echo=TRUE,fig.asp=2/3}
+# plot the bars in descending order
+ggplot(plotdata, aes(x = reorder(Species, -n), y = n)) + 
+  geom_bar(stat = "identity") +
+  labs(x = "Species", y = "Frequency", 
+       title = "Individuals by species")
+```
+
+##   
+```{r echo=TRUE,fig.asp=1/2}
+# plot the bars with numeric labels
+# geom_text adds the labels, 
+# vjust controls vertical justification
+ggplot(plotdata, aes(x = reorder(Species, n), y = n)) + 
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = n), vjust=-0.5) +
+  labs(x = "Species", y = "Frequency", 
+       title = "Individuals by species")
+```
+##  
+```{r}
+plotdata <- FI_Murcia_sub %>% count(Species) %>% mutate(pct = n / sum(n),
+pctlabel = paste0(round(pct*100), "%"))
+```
+
+```{r}
+# plot the bars as percentages,
+# in descending order with bar labels 
+ggplot(plotdata, aes(x = reorder(Species, -pct), y = pct)) +
+  geom_bar(stat = "identity", fill = "indianred3", color = "black") + 
+  geom_text(aes(label = pctlabel), vjust = -0.25) + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Species", y = "Percent", title = "Individuals by species")
+```
+## Overlapping labels
+```{r}
+# horizontal bar chart
+ggplot(FI_Murcia_sub, aes(x = Species)) + 
+  geom_bar() +
+  labs(x = "", y = "Frequency", title = "Individuals by shape") + coord_flip()
+```
+
+# Univariate Graphs - Quantitative
+
+## Histogram
+```{r echo=TRUE, message=FALSE, warning=FALSE ,fig.asp=1/2}
+# plot the age distribution using a histogram
+ggplot(FI_Murcia_sub, aes(x = Height)) + geom_histogram() +
+  labs(title = "Individuals by Height", x = "Height")
+```
+
+##   
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# plot the histogram with blue bars and white borders
+ggplot(FI_Murcia_sub, aes(x = Height)) + 
+  geom_histogram(fill = "cornflowerblue", color = "white") + 
+  labs(title = "Individuals by Height", x = "Height")
+```
+
+##  
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# plot the histogram with 20 bins
+ggplot(FI_Murcia_sub, aes(x = Height)) + 
+  geom_histogram(fill = "cornflowerblue", color = "white", bins = 20) + 
+  labs(title="Individuals by Height", subtitle = "number of bins = 20", x = "Height")
+```
+
+##  
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# plot the histogram with a binwidth of 5
+ggplot(FI_Murcia_sub, aes(x = Height)) + 
+  geom_histogram(fill = "cornflowerblue", color = "white", binwidth = 5) + 
+  labs(title="Individuals by Height", subtitle = "binwidth = 5 meters", x = "Height")
+```
+
+##  
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# plot the histogram with percentages on the y-axis
+library(scales) 
+ggplot(FI_Murcia_sub, aes(x = Height, y= ..count.. / sum(..count..))) +
+  geom_histogram(fill = "cornflowerblue", color = "white", binwidth = 5) + 
+  labs(title="Individuals by Height", y = "Percent", x = "Height") + 
+  scale_y_continuous(labels = percent)
+```
+
+##  
+There are more things to add some "fantasy" to your plots as:
+
+* Kernel density plot
+* Dotplot
+* etc.
+
+# Bivariate Graphs
+
+## Categorical vs Categorical
+
+##  
+```{r echo=TRUE, fig.asp=1/2}
+# stacked bar chart
+FI_Murcia_sub$Shape<- as.factor(FI_Murcia_sub$Shape)
+ggplot(FI_Murcia_sub,
+aes(x = Species,
+fill = Shape)) + geom_bar(position = "stack")
+```
+From the chart, we can see for example, that the most common species is F. sylvatica. An the most common shape for all the species is 2
+
+**Stacked is the default, so the last line could have also been written as `geom_bar()`.**
+
+##  Grouped bar chart
+```{r echo=TRUE, fig.asp=1/3}
+ggplot(FI_Murcia_sub,
+      aes(x = Species,
+          fill = Shape)) + geom_bar(position = "dodge")
+```
+By default, zero count bars are dropped and the remaining bars are made wider. This may not be the behavior you want. You can modify this using the `position = position_dodge(preserve = "single")` option.
+
+
+##
+```{r echo=TRUE, fig.asp=2/3}
+ggplot(FI_Murcia_sub,
+      aes(x = Species,
+          fill = Shape)) + 
+        geom_bar(position = position_dodge(preserve="single"))
+```
+
+
+##
+```{r echo=TRUE, fig.asp=2/3}
+#Segmented bar chart
+FI_Murcia_sub$Shape<- as.factor(FI_Murcia_sub$Shape)
+ggplot(FI_Murcia_sub,
+      aes(x = Species,
+          fill = Shape)) + 
+        geom_bar(position = "fill") + labs(y="Proportion")
+```
+This type of plot is particularly useful if the goal is to compare the percentage of a category in one variable across each level of another variable.
+
+## Quantitative vs Quantitative
+
+##
+The simplest display of two quantitative variables is a scatterplot, with each variable represented on an axis.
+```{r echo=TRUE, fig.asp=1/2}
+# simple scatterplot
+ggplot(FI_Murcia_sub,
+aes(x = Diameter1, y = Height)) + 
+  geom_point()
+```
+
+##
+```{r echo=TRUE, fig.asp=1/2}
+# scatterplot with linear fit line
+ggplot(FI_Murcia_sub,
+aes(x = Diameter1, y = Height)) + 
+  geom_point(color="steelblue") +
+  geom_smooth(method = "lm")
+```
+Clearly, Height increases with Diameter. However a straight line does not capture this non-linear effect. A polynomial regression line will fit better here.
+
+##
+```{r echo=TRUE, fig.asp=1/2}
+# scatterplot with quadratic line of best fit
+ggplot(FI_Murcia_sub,
+aes(x = Diameter1, y = Height)) + 
+  geom_point(color="steelblue") +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2),
+  color = "indianred3")
+```
+
+##
+Finally, a smoothed nonparametric fit line can often provide a good picture of the relationship. The default in **`ggplot2`** is a loess line which stands for for locally weighted scatterplot smoothing.
+
+```{r echo=TRUE, fig.asp=1/2}
+# scatterplot with quadratic line of best fit
+ggplot(FI_Murcia_sub,
+aes(x = Diameter1, y = Height)) + 
+  geom_point(color = "steelblue") +
+  geom_smooth(color = "tomato")
+```
+
+## Line plot
+When one of the two variables represents time, a line plot can be an effective method of displaying relationship.
+```{r echo=TRUE, fig.asp=1/2}
+library(curl)
+rats <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/LeslieandDaviesRats.csv"))
+ggplot(rats, 
+       aes(x = time, y = captures)) + 
+  geom_line()
+```
+
+##
+```{r echo=TRUE, fig.asp=1/2}
+# line plot with points and improved labeling
+ggplot(rats,
+  aes(x = time, y = captures)) +
+geom_line(size = 1.5, color = "lightgrey") + geom_point(size = 3, color = "steelblue") +
+labs(y = "Individuals captured", x = "Ocasion",
+title = "Removal method data", subtitle = "An Attempt to Determine the Absolute Number of Rats on a Given Area",
+caption = "Leslie and Davies (1939)")
+```
+**Time dependent data is covered in more detail under Time series.**
+
+## Categorical vs Quantitative
+
+When plotting the relationship between a categorical variable and a quantitative variable, a large number of graph types are available.
+
+These include bar charts using summary statistics, grouped kernel density plots, side-by-side box plots, side-by-side violin plots, and Cleveland plots.
+
+## Bar chart (on summary statistics)
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+# calculate mean salary for each rank
+plotdata <- FI_Murcia_sub %>%
+    group_by(Species) %>% 
+    summarize(mean_Height = mean(Height))
+# plot mean salaries
+ggplot(plotdata, 
+       aes(x = Species, y = mean_Height)) + 
+  geom_bar(stat = "identity")
+```
+
+```{r echo=TRUE, fig.asp=2/3}
+# plot mean heights in a more attractive fashion
+library(scales) 
+ggplot(plotdata,
+      aes(x = factor(Species,
+          labels = c("Castanea\nsativa", "Fagus\nsylvatica", "Pinus\nnigra", "Quercus\nrobur")), y = mean_Height)) +
+    geom_bar(stat = "identity", fill = "cornflowerblue") +
+    geom_text(aes(label = round(mean_Height, 2)), 
+      vjust = -0.2) +
+  labs(title = "Mean Height by tree species",
+    subtitle = "National Forest Inventory (Murcia)", x = "",
+    y = "m")
+```
+
+## Grouped kernel density plots
+One can compare groups on a numeric variable by superimposing kernel density plots in a single graph.
+```{r echo=TRUE, fig.asp=1/2}
+# by rank using kernel density plots 
+ggplot(FI_Murcia_sub,
+    aes(x = Height, fill = Species)) +
+  geom_density(alpha = 0.4) +
+  labs(title = "Height distribution by species")
+```
+`alpha` values range from 0 (transparent) to 1 (opaque)
+
+## Box plots
+
+```{r echo=TRUE, fig.asp=1/2}
+# plot the distribution of salaries by rank using boxplots
+ggplot(FI_Murcia_sub,
+      aes(x = Species, y = Height)) + 
+  geom_boxplot() +
+labs(title = "Height distribution by species")
+```
+
+## Violin plots
+Violin plots are similar to kernel density plots, but are mirrored and rotated 90$^\circ$ .
+```{r echo=TRUE, fig.asp=1/2}
+ # plot the distribution of salaries by rank using violin plots 
+ggplot(FI_Murcia_sub,
+      aes(x = Species, y = Height)) +
+      geom_violin() +
+      labs(title = "Height distribution by species")
+```
+
+##
+A useful variation is to superimpose boxplots on violin plots.
+```{r echo=TRUE, fig.asp=1/2}
+# plot the distribution of salaries by rank using violin plots 
+ggplot(FI_Murcia_sub,
+      aes(x = Species, y = Height)) +
+      geom_violin(fill = "cornflowerblue") + 
+      geom_boxplot(width = .2, fill = "orange", outlier.color = "orange", outlier.size = 2) +
+      labs(title = "Height distribution by species")
+```
+
+## Cleveland Dot Charts
+Cleveland plots are useful when you want to compare a numeric statistic for a large number of groups.
+```{r echo=TRUE, fig.asp=2/3}
+# plot the distribution of salaries by rank using violin plots 
+plotdata<-FI_Murcia %>% 
+    group_by(Species) %>%
+    mutate(Mean = mean(Height, na.rm=TRUE))
+ggplot(plotdata,
+      aes(x = Mean, y = Species)) +
+      geom_point()
+```
+
+##
+```{r echo=TRUE, fig.asp=2/3}
+# plot the distribution of salaries by rank using violin plots 
+ggplot(plotdata,
+      aes(x = Mean, y = reorder(Species,Mean))) +
+      geom_point()
+```

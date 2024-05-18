@@ -1,0 +1,289 @@
+---
+title: "Data visualisation III  \nMultivariate plots, Maps and Regressions"
+author:
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+#date: "null"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Grouping
+
+```{r echo=TRUE}
+library(curl)
+Fires <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/Largest_fires_by_continent.csv"))
+attach(Fires)
+```
+
+##
+In grouping, the values of the first two variables are mapped to the x and y axes. Then additional variables are mapped to other visual characteristics such as color, shape, size, line type, and transparency. Grouping allows you to plot the data for multiple groups in a single graph.
+```{r echo=TRUE,fig.asp=1/2}
+library(ggplot2)
+ggplot(Fires, 
+      aes(x = speed..km.day.1., y=Size..km2.)) + 
+      geom_point() +
+      labs(title = "Size (km2) by speed (km/day)")
+```
+
+##  
+Next, let’s include the Regions, using color.
+```{r echo=TRUE,fig.asp=2/3}
+ggplot(Fires, 
+      aes(x = speed..km.day.1., y=Size..km2., 
+      color = dominant.spread.direction)) + geom_point() +
+      labs(title = "Size (km2) by speed (km/day) and region")
+```
+
+##
+Finally, let’s add the shape of the trees, using the shape of the points to indicate shape. We’ll increase the point size and add transparency to make the individual points clearer.
+```{r echo=TRUE,fig.asp=1/2}
+ggplot(Fires, 
+      aes(x = speed..km.day.1., y=Size..km2., 
+      color = dominant.spread.direction, shape = Region)) + geom_point() +
+      labs(title = "Size (km2) by speed (km/day), region and dominant spread direction")
+```
+
+##
+```{r echo=TRUE,fig.asp=1/2}
+ggplot(Fires, 
+  aes(x = speed..km.day.1., y=Size..km2., color = Region)) + 
+  geom_point(alpha = .4, size = 3) +
+  geom_smooth(se=FALSE, method = "lm", formula = y~poly(x,2), size = 1.5) + 
+  labs(x = "Speed (km/day)", y = "Size (km2)", title = "Size (km2) by speed (km/day) and region", 
+    subtitle = "Summary of Large Forest Fires", y = "", color = "Regions") +
+    scale_color_brewer(palette = "Set1") + theme_minimal()
+```
+Grouping allows you to plot multiple variables in a single graph, using visual characteristics such as color, shape, and size.
+
+##
+
+In **faceting**, a graph consists of several separate plots or small multiples, one for each level of a third variable, or combination of variables. It is easiest to understand this with an example.
+```{r echo=TRUE, fig.asp=2/3, message=FALSE}
+ggplot(Fires, aes(x = Size..km2.)) + geom_histogram(fill = "cornflowerblue",
+    color = "white") + facet_wrap(~Region, ncol = 1) +
+    labs(title = "Size (km2) by species")
+```
+The `facet_wrap` function creates a separate graph for each `species`. The `ncol` option controls the number of columns.
+
+##  
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+ggplot(Fires, aes(x = Size..km2.)) + 
+  geom_histogram(fill = "cornflowerblue", color = "white") + 
+  facet_wrap(Region ~ dominant.spread.direction) +
+  labs(title = "Size histograms by Region")
+```
+The format of the `facet_grid` function is `facet_grid( row variable(s) ~ column variable(s))`
+
+##
+
+```{r include=FALSE}
+library(dplyr)
+plotdata <- Fires %>% 
+  group_by(Region, year) %>%                            # multiple group columns
+  summarise(total = sum(Size..km2.), mean_size = mean(Size..km2.))  # multiple summary columns
+```
+
+```{r echo=TRUE,fig.asp=1/2}
+# plot total area by year, for each country
+ggplot(plotdata, aes(x=year, y = total)) + geom_line(color="grey") + 
+geom_point(color="blue") + facet_wrap(~Region) + theme_minimal(base_size = 9) + 
+theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+labs(title = "Changes in burned area",x = "Year",y = "Total area")
+```
+
+# Maps
+
+##
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(rworldmap) 
+# get map
+MyMap <- ggplot() + borders("world", colour="black", fill="grey") + theme_bw()
+MyMap
+```
+
+```{r}
+MyMap  +
+  geom_point(data = Fires, aes(x=lon, y=lat),size = 2, color = "red")+
+  theme(panel.grid.major = element_line(color = "gray60", linetype = "dashed", size = 0.25), 
+        panel.background = element_rect(fill = "aliceblue"))
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(viridis)
+MyMap  + 
+  geom_point(data = Fires, aes(x=lon, y=lat, color = Size..km2.),size = 2) +
+  scale_color_viridis() +
+  theme(panel.grid.major = element_line(color = "gray60", linetype = "dashed", size = 0.25), 
+        panel.background = element_rect(fill = "aliceblue"))
+```
+## 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(viridis)
+MyMap  + coord_fixed(xlim=c(-10, 37.5), ylim=c(30, 48)) + 
+  geom_point(data = Fires, aes(x=lon, y=lat, color = Size..km2.),size = 2) +
+  scale_color_viridis() +
+  theme(panel.grid.major = element_line(color = "gray60", linetype = "dashed", size = 0.25), 
+        panel.background = element_rect(fill = "aliceblue"))
+```
+
+## 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE ,fig.asp=1/2}
+MyMap  + coord_fixed(xlim=c(-10, 37.5), ylim=c(30, 48)) + 
+  geom_point(data = Fires, aes(x=lon, y=lat, color = Size..km2.),size = 2) +
+  scale_color_viridis() +
+  facet_wrap(~year) +
+  theme(panel.grid.major = element_line(color = "gray60", linetype = "dashed", size = 0.25), 
+        panel.background = element_rect(fill = "aliceblue"))
+```
+
+
+# Time-dependent graphs
+
+## Time series
+```{r include=FALSE}
+library(curl)
+pm10 <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/pm10daily.csv"))
+pm10$site<-as.factor(pm10$site)
+pm10subset <- subset(pm10, site == "Ealing - Hanger Lane Gyratory")
+attach(pm10subset)
+```
+
+##   
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.asp=2/3}
+ggplot(pm10subset, aes(x = day, y = pm10)) +
+      geom_line() +
+      labs(title = "Levels of pm10 during 2014", x = "Day of the year", y = "pm10 concentration")
+```
+
+##  
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.asp=2/3}
+library(scales)
+ggplot(pm10subset, aes(x = day, y = pm10)) +
+    geom_line(color = "indianred3", size=1 ) +
+    geom_smooth() +  labs(title = "Pm10 levels", subtitle = "2014", x = "DOY", y = "pm10 concentration") +
+    theme_minimal()
+```
+
+##  
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.asp=2/3}
+# multivariate time series
+attach(pm10)
+ggplot(pm10,
+    aes(x=day , y= pm10, color=site)) + geom_line(size=1) + 
+    labs(title = "pm10 levels London",
+    subtitle = "2014", caption = "source: OpenAir", y = "pm10 concentration") +
+    theme_minimal() + scale_color_brewer(palette = "Dark2")
+```
+
+## Area Charts
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.asp=2/3}
+ggplot(pm10subset, aes(x = day, y = pm10)) + 
+  geom_area(fill="lightblue", color="black") + 
+  labs(title = "pm10 levels", x = "day", y = "pm10 concentration")
+```
+
+##  
+A stacked area chart can be used to show differences between groups over time.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.asp=2/3}
+ggplot(pm10, aes(x = day, y = pm10, fill= site)) + 
+  geom_area() + 
+  labs(title = "pm10 levels", x = "day", y = "pm10 concentration")
+```
+
+
+# Statistical models
+
+## Correlation plots
+
+The levels of the site variable can be reversed using the fct_rev function in the forcats package.
+```{r include=FALSE}
+library(curl)
+FI_Murcia <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/FI_Murcia.csv"))
+attach(FI_Murcia)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+df <- dplyr::select_if(FI_Murcia, is.numeric)
+r <- cor(df, use="complete.obs") 
+round(r,2)
+```
+
+
+##
+```{r echo=TRUE, fig.asp=2/3}
+library(ggcorrplot) 
+ggcorrplot(r)
+```
+By default, zero count bars are dropped and the remaining bars are made wider. This may not be the behavior you want. You can modify this using the `position = position_dodge(preserve = "single")` option.
+
+
+##
+```{r echo=TRUE, fig.asp=2/3}
+ggcorrplot(r,
+            hc.order = TRUE,
+            type = "lower", lab = TRUE)
+```
+
+
+## Linear Regression
+```{r echo=TRUE, fig.asp=1/2}
+Height_lm <- lm(Height ~ Diameter1 + Diameter2, data = FI_Murcia)
+library(visreg)
+#The visreg function takes (1) the model and (2) the variable of interest and plots 
+#the conditional relationship, controlling for the other variables. 
+#The option gg = TRUE is used to produce a ggplot2 graph.
+visreg(Height_lm, "Diameter1", gg = TRUE) +
+  labs(title = "Relationship between Height and Diameter1",
+  caption = "source:   NFI Murcia",
+y = "Height (m)",
+x = "Diameter (m)")
+```
+
+## Logistic regression
+```{r include=FALSE, echo=TRUE, fig.asp=1/2}
+Chrod <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/Chrodatacomplete.csv"))
+library(tidyr)
+Chrod <- na.omit(Chrod)
+attach(Chrod)
+Chrod_glm <- glm(presence ~ altitude + Temperature..C. + Rainfall..mm. + Beaufort.scale,
+              family="binomial", data=Chrod)
+```
+
+```{r echo=TRUE, fig.asp=1/2}
+visreg(Chrod_glm, "altitude",
+    gg = TRUE,
+    scale="response") + labs(y = "Prob(Presence)", x = "Altitude",
+    title = "Relationship of Age and Presence")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

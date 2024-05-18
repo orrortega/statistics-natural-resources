@@ -1,0 +1,233 @@
+---
+title: "Data visualisation IV  \nOther Graphs"
+author:
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+#date: "null"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## 3D Scatterplot
+
+```{r echo=TRUE}
+library(curl)
+FI_Murcia <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/FI_Murcia.csv"))
+FI_Murcia_sub = subset(FI_Murcia, Species == c("Castanea sativa", "Fagus sylvatica", "Pinus nigra", "Quercus robur"))
+attach(FI_Murcia)
+```
+
+##
+Let's say that we want to plot Height vs. Diameter1 vs. Diameter2 with the National Forest Inventory dataset.
+```{r echo=TRUE,fig.asp=2/3}
+# basic 3-D scatterplot
+library(scatterplot3d) 
+with(FI_Murcia_sub , {
+  scatterplot3d(x = Diameter1, y = Diameter2, z = Height,
+        main="3-D Scatterplot Height vs Diameter")
+})
+
+```
+
+##  
+Next, let's include the Regions, using color.
+```{r echo=TRUE, eval=FALSE}
+FI_Murcia_sub$Species<-as.character(FI_Murcia_sub$Species)
+# create column indicating point color
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Castanea sativa"] <- "red" 
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Quercus robur"] <- "blue" 
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Fagus sylvatica"] <- "green"
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Pinus nigra"] <- "yellow"
+with(FI_Murcia_sub, {
+s3d <- scatterplot3d(
+x = Diameter1, y = Diameter2, z = Height,
+color = pcolor, pch = 19,
+main = "3-D Scatterplot Height vs Diameter by species")
+# add the legend 
+legend("topleft", #location
+  inset=.05, 
+cex=1, title="Species",
+c("Castanea sativa", "Fagus sylvatica", "Pinus nigra", "Quercus robur"),
+fill=c("red", "blue", "green", "yellow"))
+})
+```
+
+##  
+Next, let's include the Regions, using color.
+```{r echo=FALSE, fig.asp=2/3}
+FI_Murcia_sub$Species<-as.factor(FI_Murcia_sub$Species)
+# create column indicating point color
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Castanea sativa"] <- "red" 
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Quercus robur"] <- "blue" 
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Fagus sylvatica"] <- "green"
+FI_Murcia_sub$pcolor[FI_Murcia_sub$Species == "Pinus nigra"] <- "yellow"
+with(FI_Murcia_sub, {
+s3d <- scatterplot3d(
+x = Diameter1, y = Diameter2, z = Height,
+color = pcolor, pch = 19,
+main = "3-D Scatterplot Height vs Diameter by species")
+# add the legend 
+legend("topleft", #location
+  inset=.05, 
+cex=1, title="Species",
+c("Castanea sativa", "Fagus sylvatica", "Pinus nigra", "Quercus robur"),
+fill=c("red", "blue", "green", "yellow"))
+})
+```
+
+## Biplots
+A biplot is a specialized graph that attempts to represent the relationship between observations, between variables, and between observations and variables, in a low (usually two) dimensional space.
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+fit <- prcomp(x = FI_Murcia_sub [,-c(1,6)],center = TRUE, scale = TRUE)
+library(factoextra) # plot the results
+fviz_pca(fit, label="none", habillage=FI_Murcia_sub$Species) + theme_bw() +
+  labs(title = "Biplot of National Forest Inventory Murcia dataset")
+```
+
+##
+
+*Dim1* and *Dim2* are the first two principal components - linear combinations of the original p variables.
+
+$PC_{1}$ = $\beta_{10}$ + $\beta_{11}x_1$ + $\beta_{12}x_2$ + ... + $\beta_{1p}x_p$\
+
+$PC_{2}$ = $\beta_{20}$ + $\beta_{21}x_1$ + $\beta_{22}x_2$ + ... + $\beta_{2p}x_p$\ 
+
+The weights of these linear combinations $\beta_{ij}s$ are chosen to maximize the variance accounted for in the original variables. Additionally, the principal components $PC_{s}$ are constrained to be uncorrelated with each other.
+
+In this graph, the first PC accounts for 60% of the variability in the original data. The second PC accounts for 30%. Together, they account for 91% of the variability in the original p = 4 variables.
+
+As you can see, both the observations (Species) and variables (species characteristics) are plotted in the same graph.
+
+* Points represent observations. Smaller distances between points suggest similar values on the original set of variables.
+* The vectors (arrows) represent variables. The angle between vectors are proportional to the correlation between the variables. Smaller angles indicate stronger correlations.
+* The observations that are farthest along the direction of a variable’s vector, have the highest values on that variable.
+
+**Biplots are only accurate when the percentage of variance accounted for is high. Always check your conclusion with the original data.**
+
+##
+
+```{r echo=TRUE,fig.asp=1/2}
+fviz_pca(fit, label="none", habillage=FI_Murcia_sub$Species,
+         addEllipses=TRUE, ellipse.level=0.95)+
+  labs(title = "Biplot of National Forest Inventory Murcia dataset")
+```
+
+##
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+fviz_pca_var(fit)
+```
+
+##
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+fviz_pca(fit, label="var", habillage=FI_Murcia_sub$Species,
+         addEllipses=TRUE, ellipse.level=0.95)
+```
+
+##
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+fviz_pca_biplot(fit, label="var", habillage=FI_Murcia_sub$Species,
+                select.ind = list(contrib = 30))
+```
+
+## Bubble charts
+
+A bubble chart is basically just a scatterplot where the point size is proportional to the values of a third quantitative variable.
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+ggplot(FI_Murcia_sub,
+aes(x = Diameter1, y = Diameter2, size = Height)) + geom_point()
+```
+
+##
+We can improve the default appearance by increasing the size of the bubbles, choosing a different point shape and color, and adding some transparency.
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+ggplot(FI_Murcia_sub,
+aes(x = Diameter1, y = Diameter2, size = Height)) + 
+  geom_point(alpha = .5, fill="cornflowerblue",
+color="black", shape=21) + scale_size_continuous(range = c(1, 14)) +
+labs(title = "Auto mileage by weight and horsepower",
+size = "Height")
+```
+
+## Heatmaps
+
+A heatmap displays a set of data using colored tiles for each variable value within each observation. There are many varieties of heatmaps.
+
+```{r eval=FALSE, fig.asp=2/3, message=FALSE, warning=FALSE, include=FALSE}
+library(superheat)
+superheat(X = FI_Murcia_sub[,-c(1,2,6)],
+          yr = FI_Murcia_sub[,2],
+          yr.axis.name = "Shape",
+          membership.rows = FI_Murcia_sub$Species)
+```
+##
+
+```{r echo=TRUE, fig.asp=2/3, message=FALSE, warning=FALSE}
+library(superheat)
+superheat(X = FI_Murcia_sub[,-c(1,6)],
+  membership.rows = FI_Murcia_sub$Species, scale = TRUE,
+  left.label.text.size=3, bottom.label.text.size=3, 
+  bottom.label.size = .05)
+```
+
+##
+
+```{r echo=TRUE, fig.asp=2/3, message=FALSE, warning=FALSE}
+library(curl)
+Fires <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/Largest_fires_by_continent.csv"))
+attach(Fires)
+library(dplyr)
+plotdata2 <- Fires %>% 
+  group_by(Region, year) %>%                            # multiple group columns
+  summarise(total = sum(Size..km2.), na.rm = TRUE)
+plotdata2$Region<-as.factor(plotdata2$Region)
+library(reshape2)
+plotdata2 <- dcast(plotdata2, Region~year, value.var = "total")
+row.names(plotdata2)<- plotdata2$Region
+plotdata2$Region<- NULL
+sort.order <- order(plotdata2$"2016")
+# color scheme
+library(RColorBrewer)
+colors <- rev(brewer.pal(5, "Blues"))
+```
+
+##
+
+```{r echo=TRUE, fig.asp=2/3, message=FALSE, warning=FALSE}
+superheat(plotdata2, scale = FALSE,
+          left.label.text.size=3, bottom.label.text.size=3, bottom.label.size = .05,
+          heat.pal = colors,
+          order.rows = sort.order,
+          title = "Large forest fires\nTotal area burned by Region")
+```
+
+## Scatterplot matrix
+
+A scatterplot matrix is a collection of scatterplots organized as a grid. It is similar to a correlation plot but instead of displaying correlations, displays the underlying data.
+You can create a scatterplot matrix using the ggpairs function in the GGally package.
+
+```{r fig.asp=1/2, message=FALSE, include=FALSE}
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "red"] <- "C. sativa"
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "blue"] <- "Q. robur"
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "green"] <- "F. sylvatica"
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "yellow"] <- "P. nigra"
+library(GGally)
+ggpairs(FI_Murcia_sub[,-c(1,2,6)])
+```
+
+##
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "red"] <- "C. sativa"
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "blue"] <- "Q. robur"
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "green"] <- "F. sylvatica"
+FI_Murcia_sub$sp[FI_Murcia_sub$pcolor == "yellow"] <- "P. nigra"
+library(GGally)
+ggpairs(FI_Murcia_sub[,-c(1,2,6)])
+```
+
