@@ -1,0 +1,435 @@
+---
+title: "Generalized Linear Models Poisson Distribution"
+author:
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+#date: "null"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Our dataset - Palmer Penguins
+
+##
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(palmerpenguins)
+data("penguins")
+attach(penguins)
+penguins <- na.omit(penguins) #remove missing values
+str(penguins)
+```
+
+##
+
+First we are going to select the covariates that we need for our model
+
+body_mass_g $\sim$ bill_length_mm + bill_depth_mm + flipper_length_mm
+
+```{r echo=TRUE,fig.asp=1/2}
+library(lattice)
+MyVar <- c("bill_length_mm", "bill_depth_mm", "flipper_length_mm", 
+           "body_mass_g")
+```
+
+### Relationship answer v.s. covariates
+
+```{r echo=FALSE, fig.asp=1/2}
+Mydotplot <- function(DataSelected){
+  
+P <- dotplot(as.matrix(as.matrix(DataSelected)),
+               groups=FALSE,
+               strip = strip.custom(bg = 'white',
+                                    par.strip.text = list(cex = 1.2)),
+               scales = list(x = list(relation = "free", draw = TRUE),
+                             y = list(relation = "free", draw = FALSE)),
+               col=1, cex  = 0.5, pch = 16,
+               xlab = list(label = "Value of the variable", cex = 1),
+               ylab = list(label = "Order of the data from text file", cex = 1))
+  
+  print(P)  
+}
+
+
+Mydotplot(penguins[,MyVar])
+```
+
+### Collinearity
+
+
+```{r echo=TRUE, fig.asp=2/3}
+#Collinearity
+MyVar <- c("bill_length_mm", "bill_depth_mm", "flipper_length_mm")
+
+panel.cor <- function(x, y, digits=1, prefix="", cex.cor = 6)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r1=cor(x,y,use="pairwise.complete.obs")
+  r <- abs(cor(x, y,use="pairwise.complete.obs"))
+  txt <- format(c(r1, 0.123456789), digits=digits)[1]
+  txt <- paste(prefix, txt, sep="")
+  if(missing(cex.cor)) { cex <- 0.9/strwidth(txt) } else {
+     cex = cex.cor}
+  text(0.5, 0.5, txt, cex = cex * r)
+}
+
+pairs(penguins[, MyVar], 
+      lower.panel = panel.cor)
+```
+
+### VIF
+
+```{r fig.asp=1/2, message=FALSE, echo=TRUE}
+
+#####################################################################
+#VIF FUNCTION.
+#To use:  corvif(YourDataFile)
+corvif <- function(dataz) {
+  dataz <- as.data.frame(dataz)
+  
+  #vif part
+  form    <- formula(paste("fooy ~ ",paste(strsplit(names(dataz)," "),collapse=" + ")))
+  dataz   <- data.frame(fooy=1 + rnorm(nrow(dataz)) ,dataz)
+  lm_mod  <- lm(form,dataz)
+  
+  cat("\n\nVariance inflation factors\n\n")
+  print(myvif(lm_mod))
+}
+
+
+#Support function for corvif. Will not be called by the user
+myvif <- function(mod) {
+  v <- vcov(mod)
+  assign <- attributes(model.matrix(mod))$assign
+  if (names(coefficients(mod)[1]) == "(Intercept)") {
+    v <- v[-1, -1]
+    assign <- assign[-1]
+  } else warning("No intercept: vifs may not be sensible.")
+  terms <- labels(terms(mod))
+  n.terms <- length(terms)
+  if (n.terms < 2) stop("The model contains fewer than 2 terms")
+  if (length(assign) > dim(v)[1] ) {
+    diag(tmp_cor)<-0
+    if (any(tmp_cor==1.0)){
+      return("Sample size is too small, 100% collinearity is present")
+    } else {
+      return("Sample size is too small")
+    }
+  }
+  R <- cov2cor(v)
+  detR <- det(R)
+  result <- matrix(0, n.terms, 3)
+  rownames(result) <- terms
+  colnames(result) <- c("GVIF", "Df", "GVIF^(1/2Df)")
+  for (term in 1:n.terms) {
+    subs <- which(assign == term)
+    result[term, 1] <- det(as.matrix(R[subs, subs])) * det(as.matrix(R[-subs, -subs])) / detR
+    result[term, 2] <- length(subs)
+  }
+  if (all(result[, 2] == 1)) {
+    result <- data.frame(GVIF=result[, 1])
+  } else {
+    result[, 3] <- result[, 1]^(1/(2 * result[, 2]))
+  }
+  invisible(result)
+}
+#END VIF FUNCTIONS
+```
+
+
+```{r}
+corvif(penguins[,MyVar])
+#In principle that is ok!
+```
+
+## Fitting the model: Poisson GLM
+
+##
+
+We apply the following Poisson GLM:
+
+$$Bodymass_{i} \sim Poisson(\mu_{i})$$
+$$E(Bodymass_{i}) = var(Bodymass_{i}) = \mu_{i}$$
+$$\log(\mu_{i})=\eta_{i}$$
+
+$$\eta_{i} = \beta_{1} + \beta_{2}\times billlength + \beta_{3}\times billdepth + \beta_{4}\times flipperlength,$$
+The body mass (g), denoted by $Bodymass_{i}$, is assumed to follow a Poisson distribution with mean and variance $\mu_i$. The log link function is used
+
+##
+
+Before applying the model, we standarize the covariates.
+**standarize** $\sim$ for each covariate the mean is subtracted from the individual values, and the values are divided by its standard deviation.
+
+```{r echo=TRUE,fig.asp=1/2}
+penguins$bill_length_mm.std      <- as.numeric(scale(penguins$bill_length_mm))
+penguins$bill_depth_mm.std  <- as.numeric(scale(penguins$bill_depth_mm))
+penguins$flipper_length_mm.std <- as.numeric(scale(penguins$flipper_length_mm))
+```
+
+The following code fits the model using maximum likelihood estimation and presents the estimated parameters, standard errors, z-values, and *p*-values.
+
+```{r echo=TRUE,fig.asp=1/2}
+M1 <- glm(body_mass_g ~ bill_length_mm.std +  
+                    bill_depth_mm.std + flipper_length_mm.std,
+          family = "poisson",
+          data = penguins)
+```
+
+##
+
+```{r echo=TRUE,fig.asp=1/2}
+print(summary(M1), digits=3, signif.stars = FALSE)
+```
+
+##
+
+Results indicate that the model explains (51304 - 12171)/51304 = 76.3% of the variation in the body mass of the penguins. The AIC is 15655 but as a number *per se* it is not informative, as the porpouse of the AIC is to compare models with different set of covariates (**although with the same distribution and response variable**).
+
+##
+
+We apply the following Poisson GLM:
+
+$$Bodymass_{i} \sim Poisson(\mu_{i})$$
+
+$$E(Bodymass_{i}) = var(Bodymass_{i}) = \mu_{i}$$
+
+$$\log(\mu_{i}) = 8.33 + 0.005\times billlength_i +  0.01\times billdepth_i + 0.16\times flipperlength_i $$
+
+
+
+Note that this covariates are estandarised. We find positive effect of all covariates.
+
+##
+
+```{r echo=TRUE, fig.asp=1/2}
+par(mfrow = c(1,3), mar = c(5,5,2,2))
+plot(x=penguins$bill_length_mm.std , y = penguins$body_mass_g,
+     xlab = "Standardized bill length",
+     ylab = "Body mass",
+     ylim = c(3500, 4500),
+     cex.lab = 1,
+     pch = 16, type = "n")
+
+range(penguins$bill_length_mm.std)
+MyData <- data.frame(bill_length_mm.std = seq(-1.1, 4, length = 25),
+                     bill_depth_mm.std   = 0,
+                     flipper_length_mm.std = 0)
+P1 <- predict(M1, newdata = MyData, type = "link", se = TRUE)
+lines(x = MyData$bill_length_mm.std, y = exp(P1$fit), lwd = 3)
+lines(x = MyData$bill_length_mm.std, y = exp(P1$fit + 2*P1$se.fit), lwd = 3, lty = 2)
+lines(x = MyData$bill_length_mm.std, y = exp(P1$fit - 2*P1$se.fit), lwd = 3, lty = 2)
+     
+
+plot(x=penguins$bill_depth_mm.std  , y = penguins$body_mass_g,
+     xlab = "Standardized bill depth",
+     ylab = "Body mass",
+     ylim = c(3500, 4500),
+     cex.lab = 1,
+     pch = 16, type = "n")
+
+range(penguins$bill_depth_mm.std )
+MyData <- data.frame(bill_length_mm.std = 0,
+                     bill_depth_mm.std   = seq(-3, 1.5, length = 25),
+                     flipper_length_mm.std = 0)
+P1 <- predict(M1, newdata = MyData, type = "link", se = TRUE)
+lines(x = MyData$bill_depth_mm.std , y = exp(P1$fit), lwd = 3)
+lines(x = MyData$bill_depth_mm.std , y = exp(P1$fit + 2*P1$se.fit), lwd = 3, lty = 2)
+lines(x = MyData$bill_depth_mm.std , y = exp(P1$fit - 2*P1$se.fit), lwd = 3, lty = 2)
+     
+
+
+plot(x=penguins$flipper_length_mm.std , y = penguins$body_mass_g,
+     xlab = "Standardized flipper length",
+     ylab = "Body mass",
+     ylim = c(2500, 5000),
+     cex.lab = 1,
+     pch = 16, type = "n")
+
+range(penguins$flipper_length_mm.std)
+MyData <- data.frame(bill_length_mm.std = 0,
+                     bill_depth_mm.std   = 0,
+                     flipper_length_mm.std = seq(-4, 1, length = 25))
+P1 <- predict(M1, newdata = MyData, type = "link", se = TRUE)
+lines(x = MyData$flipper_length_mm.std, y = exp(P1$fit), lwd = 3)
+lines(x = MyData$flipper_length_mm.std, y = exp(P1$fit + 2*P1$se.fit), lwd = 3, lty = 2)
+lines(x = MyData$flipper_length_mm.std, y = exp(P1$fit - 2*P1$se.fit), lwd = 3, lty = 2)
+     
+```
+
+Predicted body mass plotted versus one covariate. In each panel one covariate varies and the other to are set to their mean value (which is 0, as they are standarized). Dotted lines show 95% confidence intervals for the mean.
+
+##  
+
+Now we can extract Pearson residuals and assesses whether there is overdispersion (or underdispersion) 
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE}
+E1 <- resid(M1, type = "pearson")
+sum(E1^2) / (nrow(penguins) - length(coef(M1)))
+```
+
+The dispersion parameter is considerably greater than 1; hence there is overdispersion. There maybe various reasons for overdispersion: a missing covariate, outliers, zero-inflaction, correlation, wrong link function, or the wrong distribution (such as Poisson instead of negative binomial).
+
+A detailed model validation should be applied to find the source of overdispersion, so that the model can be improved.
+
+### Model validation - Pearson residuals
+
+```{r echo=TRUE , fig.asp=1/2}
+F1 <- fitted(M1, type = "response")
+
+par(mfrow = c(2,2), mar = c(5,5,2,2))
+plot(x = F1, y = E1, xlab = "Fitted values",
+     ylab = "Pearson residuals", cex.lab = 1)
+abline(h=0, lty = 2)
+     
+plot(cooks.distance(M1), type = "h",
+     xlab = "Observation", ylab = "Cook distance",
+     cex.lab =  1)
+
+plot(y = penguins$body_mass_g, x = F1,
+      xlab = "Fitted values",
+      ylab = "Observed data",
+      cex.lab = 1, )
+ abline(coef=c(0, 1), lty = 2)  
+```
+
+* Panel A: there are some observations with large Pearson residuals
+* Panel B: Cook'c distance values , wich is a LOO measure of influence. There are at least 5 observations that have large influence. If there is one or two observations with large influence we can remove them, but in this case there are too many to do it.
+* Panel C: shows fitted values v.s. observed data. One hopes to see all the points following the dotted line.
+
+### Zero-inflation
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+sum(penguins$body_mass_g==0) / nrow(penguins) 
+```
+
+The model validation did not suggest ways to improve the model. There is no 0 values, so the overdispersion is not caused by zero-inflation. If the overdispersion in a Poisson GLM is due to a large variation, the **negative binomial GLM** is a candidate model. 
+
+
+## Fitting the model: NEgative Binomial GLM
+
+##
+
+$$Bodymass_{i} \sim NB(\mu_{i},k)$$
+
+$$E(Bodymass_{i}) = \mu_{i}$$
+
+$$var(Bodymass_{i}) = \mu_{i}\frac{\mu_{i}^{2}}{k}$$
+
+$$\log(\mu_{i}) = \beta_{1} + \beta_{2}\times billlength + \beta_{3}\times billdepth + \beta_{4}\times flipperlength$$
+
+##
+
+```{r echo=FALSE}
+library(MASS)
+M2 <- glm.nb(body_mass_g ~ bill_length_mm.std +  
+                    bill_depth_mm.std + flipper_length_mm.std,
+             data = penguins)
+summary(M2)
+```
+
+##
+
+`Theta` in the numerical output is the *k* from the variance function, and is estimated as 115.82. The explained variation is (1339.83-333.88)/1339.83 = 75% and is similar to that obtained by the Poisson GLM.
+
+
+### Assess overdispersion:
+
+```{r echo=TRUE}
+E2 <- resid(M2, type = "pearson")
+p <- length(coef(M2)) + 1
+sum(E2^2) / (nrow(penguins) - p)
+```
+There is a small amount of overdispersion
+
+##
+
+```{r}
+drop1(M2, test = "Chi")
+```
+
+
+##
+
+The estimated negative binomial GLM with the standarized covariates can be written as:
+
+$$Bodymass_{i} \sim NB(\mu_{i},115.82)$$
+
+$$E(Bodymass_{i}) = \mu_{i}$$
+
+$$var(Bodymass_{i}) = \mu_{i}\frac{\mu_{i}^{2}}{115.82}$$
+
+$$\log(\mu_{i}) = 8.33 + 0.005\times billlength_i + 0.01\times billdepth_i + 0.16\times flipperlength_i ,$$
+
+##
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+M2A <- glm.nb(body_mass_g ~ bill_length_mm.std + flipper_length_mm.std,
+             data = penguins)
+summary(M2A)
+```
+
+##
+
+```{r}
+anova(M2, M2A, test = "Chi")
+```
+ 
+
+##
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+par(mfrow = c(1,3), mar = c(5,5,2,2))
+plot(x = penguins$bill_length_mm.std, 
+     y = penguins$body_mass_g,
+     xlab = "Standardized bill length",
+     ylab = "Body mass",
+     cex.lab = 2,
+     pch = 16, type = "n")
+
+range(penguins$bill_length_mm.std)
+MyData <- data.frame(bill_length_mm.std = seq(-1.1, 4, length = 25),
+                     bill_depth_mm.std  = 0,
+                     flipper_length_mm.std = 0)
+P1 <- predict(M2, newdata = MyData, type = "link", se = TRUE)
+lines(x = MyData$bill_length_mm.std, y = exp(P1$fit), lwd = 3)
+lines(x = MyData$bill_length_mm.std, y = exp(P1$fit + 2*P1$se.fit), lwd = 3, lty = 2)
+lines(x = MyData$bill_length_mm.std, y = exp(P1$fit - 2*P1$se.fit), lwd = 3, lty = 2)
+     
+
+plot(x=penguins$bill_depth_mm.std , y = penguins$body_mass_g,
+     xlab = "Standardized bill depth",
+     ylab = "Body mass",
+     cex.lab = 2,
+     pch = 16, type = "n")
+
+range(penguins$bill_depth_mm.std)
+MyData <- data.frame(bill_length_mm.std = 0,
+                     bill_depth_mm.std  = seq(-3, 1.5, length = 25),
+                     flipper_length_mm.std = 0)
+P1 <- predict(M2, newdata = MyData, type = "link", se = TRUE)
+lines(x = MyData$bill_depth_mm.std, y = exp(P1$fit), lwd = 3)
+lines(x = MyData$bill_depth_mm.std, y = exp(P1$fit + 2*P1$se.fit), lwd = 3, lty = 2)
+lines(x = MyData$bill_depth_mm.std, y = exp(P1$fit - 2*P1$se.fit), lwd = 3, lty = 2)
+     
+
+
+plot(x=penguins$flipper_length_mm.std , y = penguins$body_mass_g,
+     xlab = "Standardized flipper length",
+     ylab = "Body mass",
+     cex.lab = 2,
+     pch = 16, type = "n")
+
+range(penguins$flipper_length_mm.std)
+MyData <- data.frame(bill_length_mm.std = 0,
+                     bill_depth_mm.std  = 0,
+                     flipper_length_mm.std = seq(-4, 1, length = 25))
+P1 <- predict(M2, newdata = MyData, type = "link", se = TRUE)
+lines(x = MyData$flipper_length_mm.std, y = exp(P1$fit), lwd = 3)
+lines(x = MyData$flipper_length_mm.std, y = exp(P1$fit + 2*P1$se.fit), lwd = 3, lty = 2)
+lines(x = MyData$flipper_length_mm.std, y = exp(P1$fit - 2*P1$se.fit), lwd = 3, lty = 2)
+```

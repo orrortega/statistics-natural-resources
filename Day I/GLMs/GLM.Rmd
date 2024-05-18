@@ -1,0 +1,400 @@
+---
+title: "Introdution to Generalized Linear Models"
+author: 
+-   O Rodriguez de Rivera Ortega, PhD
+-   University of Exeter
+#date: "null"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introdution
+
+-   This session provides an overview of generalized linear models
+    (GLMs).
+
+-   We shall see that these models extend the linear modelling framework
+    to variables that are not Normally distributed.
+
+-   GLMs are most commonly used to model binary or count data, so we
+    will focus on models for these types of data.
+
+## The General Linear Model
+
+In a general linear model
+
+$$y_{i} = \beta_{0} + \beta_{1}x_{1i} + \beta_{2}x_{2i} + ... + \beta_{p}x_{pi}$$
+
+the **response** $y_{i}$, $i$=1, ..., n is modeled by a linear function
+of **explanatory** variables $x_{j}$, $j$=1, ..., $p$ plus an error
+term.
+
+## General and linear
+
+Here **general** refers to the dependence on potentially more than one
+explanatory variable, v.s. the **simple linear model**
+
+$$y_{i} = \beta_{0} + \beta_{1}x_{i} + e_{i}$$
+
+The model is *linear in the parameters*, e.g.
+
+$$y_{i} = \beta_{0} + \beta_{1}x_{1} +\beta_{2}x_{1}^2 + e_{i}$$
+$$y_{i} = \beta_{0} + \gamma_{1}\delta_{1}x_{i} + e^{\beta_{2}}x_{2} +  e_{i}$$
+but not e.g.
+
+$$y_{i} = \beta_{0} + \beta_{1}x_{1}^{\beta_{2}} + e_{i}$$
+$$y_{i} = \beta_{0} + e^{\beta_{1}x_{1}} +  e_{i}$$
+
+## Error structure
+
+We assume that errors $e_{i}$ are independent and identically
+distributed such that
+
+$$E[e_{i}] = 0$$ and $$var[e_{i}] = \sigma^{2}$$
+
+Typically we assume
+
+$$e_{i} \sim N(0, \sigma^{2})$$ as a basis for inference, e.g. t-test on
+parameters.
+
+## Restrictions of Linear Models
+
+Although a very useful framework, there are some situations where
+general linear models (GLM) are not appropriate
+
+-   the range of $Y$ is restricted (e.g. binary, count)
+-   the variance of $Y$ depends on the mean
+
+**Generalized linear models** extend the general linear model framework
+to address both of these issues.
+
+## Generalised Linear Models (GLMs)
+
+A **generalized linear model** is made up of a **linear predictor**
+
+$$\eta_{i} = \beta_{0} + \beta_{1}x_{1i} + \beta_{2}x_{2i} + ... + \beta_{p}x_{pi}$$
+and two functions
+
+-   a **link** function that describes how the mean,
+    $E(Y_{i}) = \mu_{i}$, depends on the linear predictor
+
+$$g(\mu_{i}) = \eta_{i}$$ \* a **variance** function that describes how
+the variance, $var(Y_{i})$ depends on the mean
+
+$$var(Y_{i}) = \phi V(\mu)$$ where de **dispersion parameter** $\phi$ is
+a constant.
+
+## Normal General Linear model
+
+For the general linear model with $e \sim N(0,\sigma^{2})$ we have the
+linear predictor
+
+$$\eta_{i} = \beta_{0} + \beta_{1}x_{1i} + \beta_{2}x_{2i} + ... + \beta_{p}x_{pi}$$
+the link function $$g(\mu_{i}) = \mu_{i}$$ and the variance function
+$$V(\mu_{i}) = 1$$
+
+## Modeling Binomial Data
+
+Suppose
+
+$$Y_{i} \sim Binomial(n_{i}, p_{i})$$ and we wish to model the
+proportions $Y_{i} / n_{i}$. Then
+
+$$E(Y_{i}/n_{i})= p_i$$
+$$var(Y_{i}/n_{i}) = \frac{1}{n_{i}} p_{i} (1-p{i})$$
+
+So our function is
+
+$$V(\mu_{i}) = \mu_{i}(1-\mu_{i})$$ Our link function must map from
+(0,1) $\rightarrow (- \infty, \infty)$. A natural choice is
+
+$$g(\mu_{i}) = \log(\mu_{i})$$
+
+## Transformation v.s. GLM
+
+In some situations a response variable can be transformed to improve
+linearity and homogeneity of variance so that a general linear model can
+be applied.
+
+This approach has some drawbacks
+
+-   response variable \textcolor{blue}{has changed}
+-   transformation must simultaneously improve linearity and homogeneity
+    of variance
+-   transformation may not be defined on the boundaries of the sample
+    space
+
+## 
+
+For example, a common remedy for the variance increasing with the mean
+is to apply a log transform, e.g.
+$$log(y_{i}) = \beta_{0} + \beta_{1}x_{1} + e_{1}$$
+
+$$ \Rightarrow E(logY_{i}) = \beta_{0} + \beta_{1}x_{1}$$ This is a
+linear model for the mean of log$Y$ which may not always be appropriate.
+E.g. if $Y$ is income perhaps we are really interested in the mean
+income of population subgroups, in which case it would be better to
+model $E(Y)$ using glm:
+
+$$log E(Y_{i}) = \beta_{0} + \beta_{1}x_{1})$$ with $V(\mu)=\mu$. This
+avoids difficulties with $y = 0$
+
+## Exponential Family
+
+Most of the commonly used statistical distributions, e.g. Normal,
+Binomial and Poisson, are members of the exponential family of
+distributions whose identities can be writen in the form
+
+$$f(y; \theta, \phi) = exp \bigg\{\frac{y\theta-b(\theta)}{\phi+c(y,\theta)}\bigg\}$$
+where $\phi$ is the dispersion parameter and $\theta$ is the **canonical
+parameter**.
+
+It can be shown that $$E(Y)=b'(\theta)=\mu$$ and
+$$var(Y)=\phi b''(\theta)=\phi V(\mu)$$
+
+## Canonical Links
+
+For a glm where the response follows and exponential distribution we
+have
+
+$$g(\mu_{i})=g(b'(\theta))=\beta_{0}+\beta_{1}x_{1i}+...+\beta_{p}x_{pi}$$
+The **canonical link** is defined as $$g=(b')^{-1}$$
+$$ \Rightarrow g(\mu_{1})=\theta_{i}=\beta_{0}+\beta_{1}x_{1i}+...+\beta_{p}x_{pi}$$
+Canonical links lead to desirable statistical properties of the glm
+hence tend to be used by default. However there is no *a priori* reason
+why the systematic effects in the model should be additive on the scale
+given by this link.
+
+## Estimation of the Model Parameters
+
+A single algorithm can be used to estimate the parameters of an
+exponential family glm using maximum likelihood.
+
+The log-likelihood for example $y_{1},...,y_{n}$
+$$l=\sum_{i=1}^{n} \frac{y_{i}-\mu_{i}}{\phi_{i}V(\mu_{i})} + c(y_{i},\phi_{i}) $$
+The maximum likelihood estimates are obtained by solving the score
+equations
+$$s(\beta_{j})=\frac{\partial l}{\partial \beta_{j}}=\sum_{i=1}^{n}\frac{y_{i}-\mu_{i}}{\phi_{i}V(\mu_{i})}\times\frac{x_{ij}}{g'(\mu_{ij})}=0$$
+for parameters $\beta_{j}$
+
+## Standard Errors
+
+The estimates $\hat{\beta}$ have the usual properties of maximum
+likelihood estimators. In particular, $\hat{\beta}$ is assymptotically
+
+$$N(\beta,i^{-1})$$ where $$i(\beta)=\phi^{-1}X^{T}WX$$ Standard errors
+for $\beta_{j}$ may therefore be calculated as the square roots of the
+diagonal elements of
+
+$$\hat{cov}(\hat{\beta})=\phi(X^{T}\hat{W}X)^{-1}$$
+
+in which $(X^{T}\hat{W}X)^{-1}$ is a by-product of the final IWLS
+iteration. If $\phi$ is unknown, an estimate is required.
+
+## The \`**glm**\` Function
+
+Generalized linear models can be fitted in R using the `glm` function,
+which is similar to the `lm` function for fitting linear models.
+
+The arguments to a `glm` call are as follows
+
+`glm(formula, family = gaussian, data, weights, subset,`\
+`na.action, start = NULL, etastart, mustart, offset,`\
+`control = glm.control(...), model = TRUE,`\
+`method = ”glm.fit”, x = FALSE, y = TRUE,`\
+`contrasts = NULL, ...)`
+
+## Formula Argument
+
+The formula is specified to `glm` as, e.g.
+
+**y** $\sim$ x1 + x2
+
+where **x1** and **x2** are the names of *numeric vectors (continuous
+variables)* factors (categorical variables)
+
+All specified variables must be in the workspace or in the data frame
+passed to the **data** argument.
+
+## 
+
+Other symbols that can be used in the formula include
+
+-   **a:b** for an interaction between **a** and **b**
+-   **a\*b** which expands to **a + b + a:b**
+-   **.** for first order terms of all variables in data
+-   **-** to exclude a term or terms
+-   **1** to include an intercept (included by default)
+-   **0** to exclude an intercept
+
+## Family argument
+
+The **family** argument takes (the name of) a family function which
+specifies
+
+-   the link function
+-   the variance function
+-   various related objects used by `glm`, e.g. `linkinv`
+
+The exponential family functions available in R are
+
+-   **binomial(link = "logit")**
+-   **gaussian(link = "identity")**
+-   **Gamma(link = "inverse")**
+-   **inverse.gaussian(link = "1/mu2")**
+-   **poisson(link = "log")**
+
+## Extractor Functions
+
+The glm function returns an object of class **c(`"glm"`, `"lm"`)**
+
+There are several `glm` or `lm` methods available for
+accessing/displaying components of the `glm` object, including:
+
+-   **residuals()**
+-   **fitted()**
+-   **predict()**
+-   **coef()**
+-   **deviance()**
+-   **formula()**
+-   **summary()**
+
+## Example: Forest Inventory Murcia
+
+```{r include=FALSE}
+library(curl)
+FI_Murcia <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/FI_Murcia.csv"))
+attach(FI_Murcia)
+FI_Murcia_sub = subset(FI_Murcia, Species == c("Castanea sativa", "Fagus sylvatica", "Pinus nigra", "Quercus robur"))
+```
+
+## 
+
+First, we plot the scatterplot
+
+```{r echo=TRUE,fig.asp=2/3}
+# plot the distribution of species
+plot(Height ~ Diameter1, data=FI_Murcia_sub  ,xlab = "Diameter (m)", ylab = "Height (m)") 
+```
+
+It would seem that a simple linear model would fit the data well
+
+## Summary of Fit using `lm`
+
+We will first fit the model using `lm`, then compare to the results
+using `glm`.
+
+```{r}
+HeightLM <- lm(Height ~ Diameter1, data=FI_Murcia_sub )
+summary(HeightLM)
+```
+
+## Summary of Fit using `glm`
+
+The default family for **`glm`** is **"gaussian"** so the arguments of
+the call are unchanged. A five-number summary of the deviance residuals
+is given.
+
+```{r}
+HeightGLM <- glm(Height ~ Diameter1, data=FI_Murcia_sub)
+summary(HeightGLM)
+```
+
+Partial t-tests test the significance of each coefficient in the
+presence of the others. The dispersion parameter for the gaussian family
+is equal to the residual variance.
+
+## 
+
+Different model summaries are reported for GLMs. First we have the
+deviance of two models:
+
+```         
+Null deviance: 70519  on 1794  degrees of freedom
+```
+
+Residual deviance: 48496 on 1793 degrees of freedom
+
+The first refers to the null model in which all of the terms are
+excluded, except the intercept if present. The degrees of freedom for
+this model are the number of data points $n$ minus 1 if an intercept is
+fitted.
+
+The second two refer to the fitted model, which has $n - p$ degrees of
+freedom, where $p$ is the number of parameters, including any intercept.
+
+## Deviance
+
+The deviance of a model is defined as
+
+$$D = 2\phi(l_{sat} - l_{mod})$$
+
+where $l_{mod}$ is the log-likelihood of the fitted model and $l_{sat}$
+is the log-likelihood of the saturated model. In the saturated model,
+the number of parameters is equal to the number of observations, so
+$\hat{y} = y$.
+
+For linear regression with Normal data, the deviance is equal to the
+residual sum of squares.
+
+## Akiake Information Criterion (AIC)
+
+Finally we have:
+
+`AIC: 11017`
+
+`Number of Fisher Scoring iterations: 2`
+
+The AIC is a measure of fit that penalizes for the number of parameters
+$p$ $$AIC = -2l_{mod} + 2p$$ Smaller values indicate better fit and thus
+the AIC can be used to compare models (not necessarily nested).
+
+## Residual Analysis
+
+Several kinds of residuals can be defined for GLMs:
+
+-   *response*: $y_{i} - \mu_{i}$
+-   *working*: from the working response in the IWLS algorithm
+-   *Pearson*
+    $$r_{i}^{P} = \frac{y_{i} - \mu_{i}} {\sqrt{V(\hat{\mu_i})}}$$ s.t.
+    $\sum_{i}(r_{i}^P)^2$ equals the generalized Pearson statistic.
+-   *deviance* r\_{i}\^D equals $\sum_{i}(r_{i}^D)^2$ the deviance
+
+## 
+
+Deviance residuals are the default used in R, since they reflect the
+same criterion as used in the fitting. For example we can plot the
+deviance residuals against the fitted values ( on the response scale) as
+follows:
+
+```{r}
+plot(residuals(HeightGLM) ~ fitted(HeightGLM),
+  xlab = expression(hat(y)[i]), ylab = expression(r[i]))
+  abline(0, 0, lty = 2)
+```
+
+## 
+
+The \textcolor{blue}{`plot`} function gives the usual choice of residual
+plots, based on the deviance residuals. By default
+
+-   deviance residuals v. fitted values
+-   Normal Q-Q plot of deviance residuals standardised to unit variance
+-   scale-location plot of standardised deviance residuals
+-   standardised deviance residuals v.s. leverage with Cook's distance
+    contours
+
+## Residual Plots
+
+```{r fig.asp= 2/3}
+par(mfrow=c(2,2))
+plot(HeightGLM)
+```
+
+For the Forest Inventory data the residuals do not indicate any problems
+with the modelling assumptions.

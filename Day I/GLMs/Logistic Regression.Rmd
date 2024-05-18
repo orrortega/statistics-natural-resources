@@ -1,0 +1,306 @@
+---
+title: "Logistic regression"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+#date: "null"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## A First Model
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+library(palmerpenguins)
+data(penguins)
+summary(penguins)
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+penguins<-na.omit(penguins)
+summary(penguins)
+```
+
+
+## Data Inspection
+
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+library(tidyverse)
+penguins <- penguins %>% filter(sex == 'male' | sex == 'female')
+summary(penguins)
+```
+
+##
+
+```{r echo=TRUE, fig.asp=1/1, message=FALSE, warning=FALSE}
+pCol <- c('#057076', '#ff8301')
+names(pCol) <- c('male', 'female')
+plot(penguins, col = pCol[penguins$sex], pch = 19)
+```
+We see that students often carry a slightly larger balance, and have far lower income. This will be useful to know when making more complicated classifiers.
+
+##
+
+```{r echo=TRUE, fig.asp=1/1, message=FALSE, warning=FALSE}
+penguins$body_mass_g <- if_else(penguins$body_mass_g < 4000, 1,0)
+```
+
+```{r echo=TRUE, fig.asp=1/1, message=FALSE, warning=FALSE}
+plot(penguins, col=penguins$body_mass_g + 1)
+```
+
+```{r echo=TRUE, fig.asp=1/1, message=FALSE, warning=FALSE}
+summary(penguins)
+```
+##
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+set.seed(42)
+x <- penguins[sample(1:nrow(penguins)),]
+train <- x[1:250,]
+test <- x[251:333,]
+```
+
+##
+
+```{r echo=TRUE, fig.asp=1/3, message=FALSE, warning=FALSE}
+model <- glm(body_mass_g ~ ., family = binomial(logit), data=train)
+summary(model)
+```
+
+##
+
+\tiny
+```{r echo=TRUE}
+# Create the model.
+model2 <- step(model,  data = train)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(model2)
+```
+
+```{r echo=TRUE}
+model3<-glm(body_mass_g ~ species + bill_length_mm + flipper_length_mm + year, family = binomial(logit), data=train)
+summary(model3)
+```
+
+```{r echo=TRUE}
+summary(model2)
+summary(model3)
+```
+
+```{r echo=TRUE}
+anova(model2, model3, test = "Chisq")
+```
+
+
+
+```{r echo=TRUE}
+head(predict(model2, type = "response"))
+head(predict(model3, type = "response"))
+```
+these predicted values are probabliliites, not classifications. We must “manually” convert the probabilities to classifications. Traditionally, a midpoint value such as 0.5 is used to “categorize” the probabilities. 
+
+```{r echo=TRUE}
+trn_pred2 <- ifelse(predict(model2, type = "response") > 0.5, "Yes", "No")
+head(trn_pred2)
+trn_pred3 <- ifelse(predict(model3, type = "response") > 0.5, "Yes", "No")
+head(trn_pred3)
+```
+
+## Logistic Regression Model Evaluation
+
+
+```{r echo=TRUE}
+# Making predictions on the train set.
+trn_tab2 <- table(predicted = trn_pred2, actual = train$body_mass_g)
+trn_tab2
+# Making predictions on the train set.
+trn_tab3 <- table(predicted = trn_pred3, actual = train$body_mass_g)
+trn_tab3
+```
+
+
+
+
+```{r echo=TRUE}
+# Making predictions on the test set.
+tst_pred2 <- ifelse(predict(model2, newdata = test, type = "response") > 0.5, "Yes", "No")
+tst_tab2 <- table(predicted = tst_pred2, actual = test$body_mass_g)
+tst_tab2
+# Making predictions on the test set.
+tst_pred3 <- ifelse(predict(model3, newdata = test, type = "response") > 0.5, "Yes", "No")
+tst_tab3 <- table(predicted = tst_pred3, actual = test$body_mass_g)
+tst_tab3
+```
+##
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+pr2 <- predict(model2, x, type="response")
+head(round(pr2, 2))
+pr3 <- predict(model3, x, type="response")
+head(round(pr3, 2))
+```
+
+##
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow=c(1,2))
+hist(pr2, breaks=20)
+hist(pr2[x$body_mass_g==TRUE], col="red", breaks=20, add=TRUE)
+hist(pr3, breaks=20)
+hist(pr3[x$body_mass_g==TRUE], col="red", breaks=20, add=TRUE)
+```
+
+
+
+## ROC 
+
+The ROC curve (receiver operating characteristic curve) illustrates the sensitivity and specificity for all possible cutoff values. We can use the roc() function from the pROC package to generate the ROC curve for our predictions.
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+library("pROC")
+par(mfrow=c(1,2))
+test_prob2 <- predict(model2, newdata = test, type = "response")
+test_roc2 <- roc(test$body_mass_g ~ test_prob2, plot = TRUE, print.auc = TRUE)
+test_prob3 <- predict(model3, newdata = test, type = "response")
+test_roc3 <- roc(test$body_mass_g ~ test_prob3, plot = TRUE, print.auc = TRUE)
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+glmadd <- glm(body_mass_g ~ 1, data = train, family = binomial) 
+summary(glmadd)
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+add1(glmadd, scope = train, test = "Chisq")
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+glmadd <- glm(body_mass_g ~ flipper_length_mm, data = train, family = binomial) 
+summary(glmadd)
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+add1(glmadd, scope = train, test = "Chisq")
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+glmadd <- glm(body_mass_g ~ flipper_length_mm + sex , data = train, family = binomial) 
+summary(glmadd)
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+add1(glmadd, scope = train, test = "Chisq")
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+glmadd <- glm(body_mass_g ~ flipper_length_mm + sex + island, data = train, family = binomial) 
+summary(glmadd)
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+add1(glmadd, scope = train, test = "Chisq")
+```
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+glmadd <- glm(body_mass_g ~ flipper_length_mm + sex + island + year, data = train, family = binomial) 
+summary(glmadd)
+```
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+add1(glmadd, scope = train, test = "Chisq")
+```
+
+
+
+
+```{r echo=TRUE}
+all.vars(formula(model2)[-2])
+all.vars(formula(model3)[-2])
+all.vars(formula(glmadd)[-2])
+```
+
+```{r echo=TRUE}
+AIC(model2)
+AIC(model3)
+AIC(glmadd)
+```
+
+```{r echo=TRUE}
+ d2 <- function(model, digits = 4) {
+round(1 - (model$deviance / model$null.deviance), digits = digits)
+}
+d2(model2) ; d2(model3) ; d2(glmadd)
+```
+
+```{r echo=TRUE}
+trn_predadd <- ifelse(predict(glmadd, type = "response") > 0.5, "Yes", "No")
+head(trn_predadd)
+```
+
+## Logistic Regression Model Evaluation
+
+
+```{r echo=TRUE}
+# Making predictions on the train set.
+trn_tabadd <- table(predicted = trn_predadd, actual = train$body_mass_g)
+trn_tabadd
+```
+
+```{r echo=TRUE}
+# Making predictions on the test set.
+tst_predadd <- ifelse(predict(glmadd, newdata = test, type = "response") > 0.5, "Yes", "No")
+tst_tabadd <- table(predicted = tst_predadd, actual = test$body_mass_g)
+tst_tabadd
+```
+
+##
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+pradd <- predict(glmadd, x, type="response")
+head(round(pradd, 2))
+```
+
+##
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+hist(pr2, breaks=20)
+hist(pr2[x$body_mass_g==TRUE], col="red", breaks=20, add=TRUE)
+hist(pr3, breaks=20)
+hist(pr3[x$body_mass_g==TRUE], col="red", breaks=20, add=TRUE)
+hist(pradd, breaks=20)
+hist(pradd[x$body_mass_g==TRUE], col="red", breaks=20, add=TRUE)
+```
+
+
+
+## ROC 
+
+The ROC curve (receiver operating characteristic curve) illustrates the sensitivity and specificity for all possible cutoff values. We can use the roc() function from the pROC package to generate the ROC curve for our predictions.
+
+```{r echo=TRUE, fig.asp=1/2, message=FALSE, warning=FALSE}
+library("pROC")
+par(mfrow=c(1,3))
+test_prob2 <- predict(model2, newdata = test, type = "response")
+test_roc2 <- roc(test$body_mass_g ~ test_prob2, plot = TRUE, print.auc = TRUE)
+test_prob3 <- predict(model3, newdata = test, type = "response")
+test_roc3 <- roc(test$body_mass_g ~ test_prob3, plot = TRUE, print.auc = TRUE)
+test_probadd <- predict(glmadd, newdata = test, type = "response")
+test_rocadd <- roc(test$body_mass_g ~ test_probadd, plot = TRUE, print.auc = TRUE)
+```
+
+
+
+
+
+
+
+
+
