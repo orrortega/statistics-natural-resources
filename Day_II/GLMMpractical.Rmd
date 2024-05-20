@@ -1,0 +1,436 @@
+---
+title: "Generalised Linear Mixed Models practical"
+author:
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+date: "12/05/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(curl)
+KW <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/Day_II/Data/pollen.csv"))
+names(KW)
+str(KW)
+```
+
+```{r}
+#Load packages and library files
+library(lattice)  #Needed for multi-panel graphs
+library(lme4)
+```
+
+
+#House keeping
+```{r}
+KW$fHive <- factor(KW$Hive)
+```
+
+#Data exploration
+```{r}
+xyplot(Dandelion ~ Time | Treatment, 
+       xlab = list("Time (days)", cex = 1.5),
+       ylab = list("Number of dandelion pollen grains", cex = 1.5),
+       data = KW, layout = c(3,1),
+       groups = Hive,
+       type = "l", col = 1,
+       strip = strip.custom(bg = 'white',
+                            par.strip.text = list(cex = 1.2)),
+       scales = list(alternating = T,
+                     x = list(relation = "same"),
+                     y = list(relation = "same"))
+)
+```
+
+### Building the model
+
+$$D_{ij} \sim Poisson(\mu_{ij})$$
+$$\log(\mu_{ij}) = Time_{ij} + Treatment_{ij} + Treatment_{ij}\times Time_{ij} + a_{i}$$
+$$a_{i} \sim N(0,\sigma_{Hive}^2)$$ 
+The model uses 6 regression parameters (1 intercept, 1 slope for Time, 2 slopes for Treatment and 2 slopes for their interaction) and one variance term for the variance of the random intercept `Hive`
+
+
+
+```{r}
+M1 <- glmer(Dandelion ~ Time * Treatment + (1|fHive),
+            data = KW, family = poisson)
+
+print(summary(M1), digits = 2, signif.stars=FALSE)
+```
+We get two `p-values` for the interaction, which mekes it difficult to assess whether the interaction is significant.
+
+```{r}
+drop1(M1, test = "Chi")
+```
+
+```{r}
+M1A <- glmer(Dandelion ~ Time + Treatment + (1|fHive),
+            data = KW, family = poisson)
+
+logLik(M1) - logLik(M1A)
+```
+The model M1 is the full model, and in MA1, we have dropped the interaction term. The difference between the two likelihood values is 70.12. Twice the difference (140.25 in the drop1 table) follows a Chi-square distribution with 2 degrees of freedom. The 2 is because the interaction contents two parameters. Hence the results of the Poisson GLMM indicate that the interaction between `Time` and `Treatement` is significant. However, the standard errors and the `p-values` are based on the assumption that the Poisson GLMM in the appropriate model. **We need to check overdispersion**
+
+
+#Check for overdispersion
+```{r}
+E1 <- resid(M1, type = "pearson")
+N  <- nrow(KW)
+p  <- length(fixef(M1)) + 1
+Overdispersion <- sum(E1^2) / (N - p)
+Overdispersion
+```
+Results indicate overdispersion, we need to determine its source.
+
+### Residuals
+
+```{r}
+F1 <- fitted(M1, type ="response")
+par(mfrow = c(2,2), mar = c(5,5,2,2))
+plot(x = F1, 
+     y = E1, 
+     xlab = "Fitted values", 
+     ylab = "Pearson residuals", 
+     cex.lab = 1.5)
+abline(h = 0, lty = 2)
+
+plot(x = KW$Time, y = E1,
+     xlab = "Time", 
+     ylab = "Pearson residuals", 
+     cex.lab = 1.5)
+abline(h = 0, lty = 2)
+
+boxplot(E1 ~ Treatment, data = KW, 
+        xlab = "Treatment", 
+        ylab = "Pearson residuals", 
+        cex.lab = 1.5) 
+abline(h = 0, lty = 2)
+
+boxplot(E1 ~ fHive, data = KW, 
+        xlab = "Hive", 
+        ylab = "Pearson residuals", 
+        cex.lab = 1.5) 
+abline(h = 0, lty = 2)
+```
+
+Based on the range of the data, it appears that a negative binomial GLMM is required.
+## Negative Binomial
+
+### Building the model
+
+$$D_{ij} \sim NB(\mu_{ij},k)$$
+$$E(D_{ij})=\mu_{ij}$$
+
+$$var(D_{ij}) = \mu_{ij} + \frac{\mu_{ij}^2}{k}$$
+
+$$\log(\mu_{ij}) = Time_{ij} + Treatment_{ij} + Treatment_{ij}\times Time_{ij} + a_{i}$$
+$$a_{i} \sim N(0,\sigma_{Hive}^2)$$ 
+
+```{r}
+# install.packages("R2admb")
+# install.packages("glmmADMB", 
+#     repos=c("http://glmmadmb.r-forge.r-project.org/repos",
+#             getOption("repos")),
+#     type="source")
+```
+
+
+```{r}
+library("glmmADMB")
+M2 <- glmmadmb(Dandelion ~ Time * Treatment, 
+             random =~ 1|fHive, 
+             family = "nbinom", data=KW)
+summary(M2)
+```
+
+```{r}
+E2 <- resid(M2, type = "pearson")
+p <- 6 + 1 + 1 #Number of betas + k + sigma
+Overdispersion2 <-sum(E2^2) / (N - p)
+Overdispersion2
+```
+
+
+```{r}
+F2 <- fitted(M2, type ="response")
+par(mfrow = c(2,2), mar = c(5,5,2,2))
+plot(x = F2, 
+     y = E2, 
+     xlab = "Fitted values", 
+     ylab = "Pearson residuals", 
+     cex.lab = 1.5)
+abline(h = 0, lty = 2)
+
+plot(x = KW$Time, y = E2,
+     xlab = "Time", 
+     ylab = "Pearson residuals", 
+     cex.lab = 1.5)
+abline(h = 0, lty = 2)
+
+boxplot(E2 ~ Treatment, data = KW, 
+        xlab = "Treatment", 
+        ylab = "Pearson residuals", 
+        cex.lab = 1.5) 
+abline(h = 0, lty = 2)
+
+boxplot(E2 ~ fHive, data = KW, 
+        xlab = "Hive", 
+        ylab = "Pearson residuals", 
+        cex.lab = 1.5) 
+abline(h = 0, lty = 2)
+```
+
+## Binomial GLMM
+
+```{r}
+ZooData <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/Day_II/Data/ZooData.csv"))
+names(ZooData)
+str(ZooData)
+```
+
+
+
+
+
+```{r}
+#House keeping
+ZooData$fRaised  	<- factor(ZooData$Raised)
+ZooData$fFeeding 	<- factor(ZooData$Feeding)
+ZooData$fOc 		<- factor(ZooData$Oc)
+ZooData$fOther 		<- factor(ZooData$Other)
+ZooData$fEnrichment <- factor(ZooData$Enrichment)
+ZooData$fGroup 		<- factor(ZooData$Group)
+ZooData$fSex 		<- factor(ZooData$Sex)
+ZooData$fZoo 		<- factor(ZooData$Zoo) 
+```
+
+
+
+
+```{r}
+#Data exploration
+#Outliers
+MyVar <- c("Scans", "Number", "Proportion", "Size", "Visual", "Visitors", "Enclosure", "Vehicle", "Diet", "Age")
+Mydotplot <- function(DataSelected){
+  
+P <- dotplot(as.matrix(as.matrix(DataSelected)),
+               groups=FALSE,
+               strip = strip.custom(bg = 'white',
+                                    par.strip.text = list(cex = 1.2)),
+               scales = list(x = list(relation = "free", draw = TRUE),
+                             y = list(relation = "free", draw = FALSE)),
+               col=1, cex  = 0.5, pch = 16,
+               xlab = list(label = "Value of the variable", cex = 1),
+               ylab = list(label = "Order of the data from text file", cex = 1))
+  
+  print(P)  
+}
+
+Mydotplot(ZooData[,MyVar])
+```
+
+We decide to `log-transform` the covariate Size, as there are several larga values
+```{r}
+ZooData$LSize <- log(ZooData$Size)
+```
+
+### Collinearity
+
+We check collinearity. The sample size is relatively low (88 observations), and there are 15 covariates. A statistics rule of thumb when employing regression models is to have approximately 15-25 times as many observations as there are covariates. The easy solution is to drop covariates.
+```{r warning=FALSE}
+MyVar <- c("LSize", "Visual", "Visitors", "Enclosure", "Vehicle", "Diet", "Age")
+panel.cor <- function(x, y, digits=1, prefix="", cex.cor = 6)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r1=cor(x,y,use="pairwise.complete.obs")
+  r <- abs(cor(x, y,use="pairwise.complete.obs"))
+  txt <- format(c(r1, 0.123456789), digits=digits)[1]
+  txt <- paste(prefix, txt, sep="")
+  if(missing(cex.cor)) { cex <- 0.9/strwidth(txt) } else {
+     cex = cex.cor}
+  text(0.5, 0.5, txt, cex = cex * r)
+}
+pairs(ZooData[,MyVar], lower.panel = panel.cor)
+```
+```{r fig.asp=1/2, message=FALSE, include=FALSE}
+
+#####################################################################
+#VIF FUNCTION.
+#To use:  corvif(YourDataFile)
+corvif <- function(dataz) {
+  dataz <- as.data.frame(dataz)
+  
+  #vif part
+  form    <- formula(paste("fooy ~ ",paste(strsplit(names(dataz)," "),collapse=" + ")))
+  dataz   <- data.frame(fooy=1 + rnorm(nrow(dataz)) ,dataz)
+  lm_mod  <- lm(form,dataz)
+  
+  cat("\n\nVariance inflation factors\n\n")
+  print(myvif(lm_mod))
+}
+
+
+#Support function for corvif. Will not be called by the user
+myvif <- function(mod) {
+  v <- vcov(mod)
+  assign <- attributes(model.matrix(mod))$assign
+  if (names(coefficients(mod)[1]) == "(Intercept)") {
+    v <- v[-1, -1]
+    assign <- assign[-1]
+  } else warning("No intercept: vifs may not be sensible.")
+  terms <- labels(terms(mod))
+  n.terms <- length(terms)
+  if (n.terms < 2) stop("The model contains fewer than 2 terms")
+  if (length(assign) > dim(v)[1] ) {
+    diag(tmp_cor)<-0
+    if (any(tmp_cor==1.0)){
+      return("Sample size is too small, 100% collinearity is present")
+    } else {
+      return("Sample size is too small")
+    }
+  }
+  R <- cov2cor(v)
+  detR <- det(R)
+  result <- matrix(0, n.terms, 3)
+  rownames(result) <- terms
+  colnames(result) <- c("GVIF", "Df", "GVIF^(1/2Df)")
+  for (term in 1:n.terms) {
+    subs <- which(assign == term)
+    result[term, 1] <- det(as.matrix(R[subs, subs])) * det(as.matrix(R[-subs, -subs])) / detR
+    result[term, 2] <- length(subs)
+  }
+  if (all(result[, 2] == 1)) {
+    result <- data.frame(GVIF=result[, 1])
+  } else {
+    result[, 3] <- result[, 1]^(1/(2 * result[, 2]))
+  }
+  invisible(result)
+}
+#END VIF FUNCTIONS
+```
+
+
+```{r}
+corvif(ZooData[ ,c("LSize",  "Visual", "Visitors", 
+                   "Age", "Enclosure", "Vehicle", 
+                   "Diet" , "fRaised", 
+                   "fFeeding", "fOc",  "fOther", 	
+                   "fEnrichment","fGroup", 	"fSex")])
+```
+
+```{r}
+corvif(ZooData[ ,c("LSize",  "Visual", "Visitors", 
+                   "Age", "Enclosure", "Vehicle", 
+                   "fRaised", 
+                   "fFeeding", "fOc",  "fOther",   
+                   "fEnrichment","fGroup", 	"fSex")])
+```
+
+```{r message=FALSE, warning=FALSE}
+corvif(ZooData[ ,c("LSize",  "Visitors", 
+                   "Age", "Enclosure", "Vehicle", 
+                   "fRaised", 
+                   "fFeeding", "fOc",  "fOther",   
+                   "fEnrichment","fGroup",   "fSex")])
+```
+### Remove diet and visual
+
+```{r}
+#Number of observations per zoo
+table(ZooData$Zoo)
+```
+
+```{r}
+ZD <- ZooData[ZooData$Zoo != 1, ]  #Remove the first zoo
+ZD$fZoo <- factor(ZD$Zoo)
+dim(ZD)
+```
+
+
+```{r}
+#Standardise all continuous covariates
+MyNorm <- function(x) { (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)}
+ZD$cLSize        <- MyNorm(ZD$LSize)
+ZD$cVisitors     <- MyNorm(ZD$Visitors)
+ZD$cAge          <- MyNorm(ZD$Age)
+ZD$cEnclosure    <- MyNorm(ZD$Enclosure)
+ZD$cVehicle      <- MyNorm(ZD$Vehicle)
+
+```
+
+```{r}
+ZD$Neg <- ZD$Scans - ZD$Number
+M1 <- glmer(cbind(Number, Neg) ~ cLSize + cVisitors+ fFeeding+ 
+            fOc + fOther + fEnrichment + fGroup + fSex + 
+            cEnclosure + cVehicle+ cAge + (1 | fZoo), 
+            family = binomial, data = ZD)
+summary(M1)
+```
+
+```{r}
+E1 <- residuals(M1)
+p1 <- length(fixef(M1)) + 1
+Overdisp1 <- sum(E1^2) / (nrow(ZD) - p1)
+Overdisp1
+```
+We have overdispersion, we need to check reasons of thid overdispersion
+
+```{r message=FALSE, warning=FALSE}
+ZD$E1 <- E1
+vars <- c("cLSize", "cVisitors",  "cEnclosure", "cVehicle", "cAge")
+Myxyplot <- function(Z, MyV, NameY1, MyXlab = "", MyYlab="") {
+  AllX  <- as.vector(as.matrix(Z[,MyV]))
+  AllY  <- rep(Z[,NameY1] , length(MyV))
+  AllID <- rep(MyV, each = nrow(Z))
+  
+  
+  library(mgcv)
+  library(lattice)
+  
+  P <- xyplot(AllY ~ AllX|factor(AllID), col = 1,
+              xlab = list(MyXlab, cex = 1.5),
+              #ylab = list("Response variable", cex = 1.5),
+              #ylab = list("Pearson residuals", cex = 1.5),
+              ylab = list(MyYlab, cex = 1.5),
+              #layout = c(2,2),   #Modify
+              strip = function(bg='white', ...)
+                strip.default(bg='white', ...),
+              scales = list(alternating = TRUE,
+                            x = list(relation = "free"),
+                            y = list(relation = "same")),
+              panel=function(x, y){
+                panel.grid(h=-1, v= 2)
+                panel.points(x, y, col = 1)
+                panel.loess(x, y, span = 0.8,col = 1, lwd = 2)
+                })
+  
+  print(P)
+}
+Myxyplot(ZD, vars,"E1")
+```
+There are not linear patterns so non-linear residual patterns are not the reason for the overdispersion.
+
+### Zero-inflation
+```{r}
+table(ZD$Number)
+```
+Zero-inflation is no the reason as 0 value was observed only 3 times.
+
+### Pearson residuals
+```{r}
+F1 <- fitted(M1, type = "response")
+par(mar = c(5, 5, 2, 2))
+plot(F1,E1, 
+     xlab = "Fitted values", 
+     ylab = "Pearson residuals", 
+     cex.lab = 1.5)
+abline(h = 0, lty = 2)
+```
+Pearson residuals does not indicate problems, although some values are fairly large
+
+**Since we cannot pinpoint one of the most common sources of overdispersion (outliers, non-linear patterns, zero inflation), we may consider another distribution or conclude that we have missing covariates**
