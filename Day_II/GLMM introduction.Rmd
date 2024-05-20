@@ -1,0 +1,194 @@
+---
+title: "GLMM Introduction"
+author:
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Example dataset: trees
+
+• Data on 1000 trees from 10 sites. • Trees per site: 4 - 392.
+
+```{r}
+library(curl)
+trees <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/Day_II/Data/trees.csv")) 
+head(trees)
+```
+
+```{r}
+trees$site <- as.factor(trees$site)
+```
+
+### Q: What's the relationship between tree diameter and height?
+
+#### A simple linear model
+
+```{r}
+lm.simple <- lm(height ~ dbh, data = trees) 
+summary(lm.simple)
+```
+
+#### Single intercept
+
+```{r}
+library(ggplot2) 
+ggplot(trees) +
+aes(dbh, height) +
+geom_point() +
+geom_smooth(method = "lm", size = 3) +
+labs(x = "DBH (cm)", y = "Height (m)", title = "Single intercept") + theme_minimal(base_size = 16)
+```
+
+#### What if allometry varies among sites?
+
+```{r}
+ggplot(subset(trees, site == 1 | site == 2)) + 
+  aes(dbh, height, colour = site) + 
+  geom_point() +
+  geom_smooth(method = "lm", size = 3) + 
+  labs(x = "DBH (cm)", y = "Height (m)",
+  title = "Different intercept for each site") + 
+  theme_minimal(base_size = 16) + 
+  theme(legend.position = "none")
+```
+
+#### Fitting a varying intercepts model with lm
+
+```{r}
+lm.interc <- lm(height ~ factor(site) + dbh, data = trees) 
+summary(lm.interc)
+```
+
+#### Single vs varying intercept
+
+```{r}
+ggplot(trees) +
+  aes(dbh, height) +
+  geom_point() +
+  geom_smooth(method = "lm", size = 3) +
+  labs(x = "DBH (cm)", y = "Height (m)", title = "Single intercept") + theme_minimal(base_size = 16)
+```
+
+```{r}
+ggplot(trees) +
+  aes(dbh, height, colour = site) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", size = 1.5, se = FALSE) + 
+  labs(x = "DBH (cm)", y = "Height (m)", title = "Different intercept for each site") + 
+  theme_minimal(base_size = 16) + theme(legend.position = "none")
+```
+
+#### Mixed models enable us to account for variability
+
+![](images/Screenshot 2024-05-20 at 21.18.12.png)
+
+• Varying intercepts
+
+• Varying slopes
+
+**Mixed models estimate varying parameters (intercepts and/or slopes) with pooling among levels (rather than considering them fully independent)**
+
+Hence there's gradient between
+
+• complete pooling: Single overall intercept.
+
+-- lm (height \~ dbh)
+
+• no pooling: One independent intercept for each site.
+
+-- lm (height \~ dbh + site)
+
+• partial pooling: Inter-related intercepts.
+
+-- lmer(height \~ dbh + (1 \| site))
+
+**Random vs Fixed effects?**
+
+1.  Fixed effects constant across individuals, random effects vary.
+
+2.  Effects are fixed if they are interesting in themselves; random if interest in the underlying population.
+
+3.  Fixed when sample exhausts the population; random when the sample is small part of the population.
+
+4.  Random effect if it's assumed to be a realized value of random variable.
+
+5.  Fixed effects estimated using least squares or maximum likelihood; random effects estimated with shrinkage.
+
+**What is a random effect, really?**
+
+• Varies by group
+
+• Variation estimated with probability model
+
+Random effects are estimated with *partial pooling*, while fixed effects are not (infinite variance).
+
+**Shrinkage improves parameter estimation**
+
+Especially for groups with low sample size
+
+![](images/Screenshot 2024-05-20 at 21.25.18.png)
+
+#### Fitting mixed/multilevel models
+
+```{r}
+library(lme4)
+mixed <- lmer(height ~ dbh + (1|site), data = trees) 
+summary(mixed)
+```
+
+#### Retrieve model coefficients
+
+```{r}
+coef(mixed)
+```
+
+#### Visualising model: allEffects
+
+```{r}
+library(effects)
+allEffects(mixed)
+```
+
+```{r}
+plot(allEffects(mixed))
+```
+
+#### Visualising model: visreg
+
+```{r}
+library(visreg)
+visreg(mixed, xvar = "dbh", by = "site", overlay = FALSE)
+```
+
+#### Visualising model: sjPlot
+
+```{r}
+library(ggplot2) 
+library(sjPlot)
+theme_set(theme_minimal(base_size = 16)) 
+#sjp.lmer(mixed, type = "ri.slope") 
+#plot_model(mixed, type = "eff")
+sjPlot::plot_model(mixed, type = "re")
+```
+
+#### Checking residuals
+
+```{r}
+plot(mixed)
+```
+
+Checking residuals
+
+```{r}
+ggResidpanel::resid_panel(mixed)
+```
+
+#### Checking residuals (DHARMa)
+
+```{r}
+DHARMa::simulateResiduals(mixed, plot = TRUE, use.u = TRUE)
+```
