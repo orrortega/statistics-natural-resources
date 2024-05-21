@@ -1,0 +1,230 @@
+---
+title: "Multivariate analysis I"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+The majority of data sets collected by researchers in all disciplines are mul- tivariate, meaning that several measurements, observations, or recordings are taken on each of the units in the data set.
+
+Most multivariate data sets can be represented in the same way, namely in a rectangular format known from spreadsheets, in which the elements of each row correspond to the variable values of a particular unit in the data set and the elements of the columns correspond to the values taken by a particular variable. 
+
+## Type of covariates
+
+Four levels of measurements are often distinguished:
+
+* Nominal: Unordered categorical variables. Examples include treatment allocation, the sex of the respondent, hair colour, presence or absence of depression, and so on.
+
+* Ordinal: Where there is an ordering but no implication of equal distance between the different points of the scale. Examples include social class, self-perception of health (each coded from I to V, say), and educational level (no schooling, primary, secondary, or tertiary education).
+
+* Interval: Where there are equal differences between successive points on the scale but the position of zero is arbitrary. The classic example is the mea- surement of temperature using the Celsius or Fahrenheit scales.
+
+* Ratio: The highest level of measurement, where one can investigate the relative magnitudes of scores as well as the differences between them. The position of zero is fixed. The classic example is the absolute measure of temperature (in Kelvin, for example), but other common ones includes age (or any other time from a fixed event), weight, and length.
+
+In many statistical textbooks, discussion of different types of measurements is often followed by recommendations as to which statistical techniques are suitable for each type; for example, analyses on nominal data should be limited to summary statistics such as the number of cases, the mode, etc.
+
+And, for ordinal data, means and standard deviations are not suitable. But Velleman and Wilkinson (1993) make the important point that restricting the choice of statistical methods in this way may be a dangerous practise for data analysis–in essence the measurement taxonomy described is often too strict to apply to real-world data.
+
+## Missing values
+
+Missing values in multivariate data may arise for a number of reasons; for example, non-response in sample surveys, dropouts in longitudinal data, or refusal to answer particular questions in a questionnaire. The most important approach for dealing with missing data is to try to avoid them during the data-collection stage of a study. But despite all the efforts a researcher may make, he or she may still be faced with a data set that contains a number of missing values.
+
+One option to deal with missing data is to take the complete-case analysis route because this is what most statistical software packages do automatically. Using complete-case analysis on multivariate data means omitting any case with a missing value on any of the variables. It is easy to see that if the number of variables is large, then even a sparse pattern of missing values can result in a substantial number of incomplete cases. One possibility to ease this problem is to simply drop any variables that have many missing values. But complete-case analysis is not recommended for two reasons:
+
+* Omitting a possibly substantial number of individuals will cause a large amount of information to be discarded and lower the effective sample size of the data, making any analyses less effective than they would have been if all the original sample had been available.
+
+* More worrisome is that dropping the cases with missing values on one or more variables can lead to serious biases in both estimation and inference unless the discarded cases are essentially a random subsample of the observed data (the term missing completely at random is often used).
+
+So, at the very least, complete-case analysis leads to a loss, and perhaps a substantial loss, in power by discarding data, but worse, analyses based just on complete cases might lead to misleading conclusions and inferences.
+
+A relatively simple alternative to complete-case analysis that is often used is available-case analysis. This is a straightforward attempt to exploit the incomplete information by using all the cases available to estimate quantities of interest. For example, if the researcher is interested in estimating the correlation matrix of a set of multivariate data, then available-case analysis uses all the cases with variables X_{i} and X_{j} present to estimate the correlation between the two variables.
+
+**Both complete-case and available-case analyses are unattractive unless the number of missing values in the data set is “small”.**
+
+## The scatterplot
+
+The scatterplot is the standard for representing continuous bivariate data but, as we shall see later in this chapter, it can be enhanced in a variety of ways to accommodate information about other variables.
+
+```{r}
+library(curl)
+trees <- read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/Day_II/Data/trees.csv"))
+str(trees)
+```
+
+```{r}
+
+dlab <- "Diameter (cm)"
+hlab <- "Height (m)"
+
+plot(height ~ dbh, data = trees,  xlab = dlab, ylab = hlab)
+```
+
+## The bivariate boxplot
+```{r}
+plot(height ~ dbh, data = trees,  xlab = dlab, ylab = hlab)
+rug(trees$dbh, side = 1)
+rug(trees$height, side = 2)
+```
+
+
+```{r}
+layout(matrix(c(2, 0, 1, 3), nrow = 2, byrow = TRUE),
+        widths = c(2, 1), heights = c(1, 1), respect = TRUE)
+
+xlim <- with(trees, range(dbh)) * 1.1
+
+plot(height ~ dbh, data = trees, cex.lab = 0.9,
+      xlab = dlab, ylab = hlab, type = "n", xlim = xlim)
+
+with(trees, text(dbh, height, cex = 0.6,
+      labels = abbreviate(row.names(trees))))
+
+with(trees, hist(dbh, main = "", xlim = xlim))
+
+with(trees, boxplot(height))
+```
+
+```{r}
+library(MVA)
+par(mfrow=c(1,2))
+with(trees, plot(height, dbh,
+                            xlab = dlab, ylab = hlab, cex.lab =0.9)) 
+with(trees, chiplot(dbh, height))
+```
+
+
+## Bubble plot
+```{r}
+fires=read.csv(curl("https://raw.githubusercontent.com/orrortega/statistics-natural-resources/main/data/Fires.csv"))
+fires$dominant.spread.direction<-as.factor(fires$dominant.spread.direction)
+str(fires)
+```
+
+```{r}
+ylim <- with(fires, range(expansion..km2.day.1.)) * c(0.95, 1)
+
+plot(expansion..km2.day.1. ~ speed..km.day.1., data = fires,
+      xlab = "Average speed (km/day)",
+      ylab = "Average expansion (km2/day)", pch = 10,
+ylim = ylim)
+with(fires, symbols(speed..km.day.1., expansion..km2.day.1., circles = Size..km2., inches = 0.5, add = TRUE))
+```
+```{r}
+require(grDevices)
+library(palmerpenguins)
+```
+
+
+## Star Plot
+```{r}
+library(tidyr)
+library(dplyr)
+library(tidyverse)
+library(ggiraphExtra)
+cbp1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+penguins %>%
+    remove_missing() %>%
+    select(-island, -year) %>%
+    ggRadar(aes(x = c(bill_length_mm, bill_depth_mm, flipper_length_mm, body_mass_g), 
+                group = species,
+                colour = sex, facet = sex), 
+            rescale = TRUE, 
+            size = 1, interactive = FALSE, 
+            use.label = TRUE) +
+     scale_color_manual(values = cbp1) +
+  scale_fill_manual(values = cbp1) +
+  theme_bw() +
+     scale_y_discrete(breaks = NULL) + # don't show ticks
+      labs(
+          title = "Radar/spider/star chart", 
+          subtitle = "Body mass of male & female penguins per species",
+          caption = "Source: https://github.com/allisonhorst/palmerpenguins")
+```
+## The scatterplot matrix
+```{r}
+mat <- penguins %>%
+  remove_missing() %>%
+  select(bill_depth_mm, bill_length_mm, body_mass_g, flipper_length_mm)
+# Correlation panel
+panel.cor <- function(x, y){
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y), digits=2)
+    txt <- paste0("R = ", r)
+    cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+# Customize upper panel
+upper.panel<-function(x, y){
+  points(x,y, pch = 19, col = cbp1[penguins$species])
+}
+# Create the plots
+pairs(mat, 
+      lower.panel = panel.cor,
+      upper.panel = upper.panel)
+```
+
+```{r warning=FALSE}
+library(car)
+peng <- penguins %>%
+    rename(
+          bill_depth = bill_depth_mm,
+          bill_length = bill_length_mm,
+          flipper_length = flipper_length_mm, 
+          body_mass = body_mass_g
+         ) %>%
+  mutate(species = as.factor(species),
+         island = as.factor(island),
+         sex = as.factor(substr(sex,1,1)))
+
+scatterplotMatrix(~ bill_depth + bill_length  + flipper_length + body_mass | species,
+                  data=peng,
+                  ellipse=list(levels=0.68),
+                  col = scales::hue_pal()(3),
+                  legend=list(coords="bottomright"))
+```
+
+```{r message=FALSE, warning=FALSE}
+library(GGally)
+ggpairs(peng, mapping = aes(color = species), 
+        columns = c("bill_length",    "bill_depth",    
+                    "flipper_length", "body_mass",
+                    "island", "sex"))
+```
+
+
+```{r}
+library("scatterplot3d")
+with(penguins, {scatterplot3d(x = mat$bill_depth_mm, y = mat$bill_length_mm, z = mat$body_mass_g, main="3-D Scatterplot Height vs Diameter")
+})
+
+```
+
+
+```{r}
+library(lattice)
+plot(xyplot(body_mass_g ~ bill_depth_mm| cut(bill_length_mm, 2), data = penguins))
+```
+
+```{r}
+library(lattice)
+plot(xyplot(body_mass_g ~ bill_depth_mm| cut(bill_length_mm, 4), data = penguins))
+```
+
+
+
+## Three dimensional plots
+
+```{r}
+flipper_length<- with(penguins, equal.count(flipper_length_mm,4))
+plot(cloud(body_mass_g ~ bill_depth_mm * bill_length_mm | flipper_length, panel.aspect = 0.9,  data = penguins))
+```
+
+

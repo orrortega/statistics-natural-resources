@@ -1,0 +1,125 @@
+---
+title: "Clustering"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+## Introduction
+
+K-means clustering is an unsupervised machine learning tool to group similar unlabeled data or to identify patterns outside of existing categorizations in labelled data. K-means is the most widely used unsupervised machine learning tool and considered “unsupervised” due to absence of labelled data in the analysis.
+
+
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(palmerpenguins)
+library(knitr)
+```
+
+```{r}
+data("penguins")
+```
+
+## Descriptive Analysis
+
+```{r message=FALSE, warning=FALSE}
+library (GGally)
+ggpairs(
+      data = penguins_raw,
+      columns = c(10:14),
+      diag = list(continuous = wrap("barDiag", color = "blue", size =4)),
+      upper = list(continuous = wrap("cor", size = 4, bins = 60))
+         )
+```
+```{r}
+names(penguins)
+```
+
+```{r}
+penguins <- penguins %>%
+      rename (
+         bill_length = bill_length_mm,
+         bill_depth = bill_depth_mm,
+         flipper_length = flipper_length_mm,
+         body_mass = body_mass_g
+         ) %>%
+      mutate (
+         id = row_number(),
+         species = word (species, 1),
+         bill_length = scale(bill_length),
+         bill_depth = scale(bill_depth),
+         flipper_length = scale(flipper_length)
+         ) %>%
+      dplyr::select(id, species, island, sex, bill_length, bill_depth, flipper_length, body_mass) %>%
+      drop_na (sex)
+```
+
+## Principal component analysis
+Large data sets can be difficult to visualize and require a larger sample size for statistical significance. Principal component analysis (PCA) is a feature extraction method that reduces the data set dimensionality (number of variables) by creating new uncorrelated variables while minimizing loss of information on the original vaiables. More detail here.
+
+A Scree plot is a typical means to identify the appropriate number of dimensions (or factors) in a cluster analysis. The Scree plot visualizes the percentage of variance explained by each of the PCA dimensions (also known as eigenvectors). Factors that add minimal variance explanation can be removed.
+
+For this analysis, the first two dimensions explain over 90% of the variance, with 66% by the first dimension alone. We can confidently focus the cluster analysis on two dimensions, which is significantly easily to visualize than the original three variables.
+
+```{r}
+library(factoextra)
+library(FactoMineR)
+penguins_PCA <-PCA(penguins[5:7], graph = F)
+fviz_screeplot(penguins_PCA)
+```
+```{r}
+fviz_pca_biplot(penguins_PCA, geom = "point") +
+      geom_point (alpha = 0.2)
+```
+## Identify optimal number of clusters
+Kmeans clustering algorithms require number of clusters ("k") as an input.
+
+Identifying the appropriate k is important because too many or too few clusters impedes viewing overall trends. Too many clusters can lead to over-fitting (which limits generalizations) while insufficient clusters limits insights into commonality of groups.
+
+There are assorted methodologies to identify the approriate k. Tests range from blunt visual inspections to robust algorithms. The optimal number of clusterse is ultimately a subjective decision
+
+**Method Elbow**
+
+Optimal clusters are at the point in which the knee "bends" or in mathemetical terms when the marginal total within sum of squares ("wss") for an additional cluster begins to decrease at a linear rate. Similar to the visualization method, the results are subjective.
+
+```{r}
+methodologies <- c("wss", "silhouette", "gap_stat")
+   
+cluster_optimal <- map (methodologies, ~fviz_nbclust (penguins[5:7], kmeans, method = .x))
+```
+
+
+```{r}
+cluster_optimal[[1]]
+```
+
+**Silhouette**
+
+The silhouette value indicates the quality of the clustering. similarity of a data point to its own cluster compared to other clusters. A silhoutte width nearer to 1 indicates the point is well-matched to its cluster and poorly matched to neighboring clusters. Silhouette widths approaching -1 are better matched to neighboring clusters.
+
+```{r}
+cluster_optimal[[2]]
+```
+
+**Gap Statistic**
+The gap statistic test is a newer optimal K test by Robert Tisharni, Guenther Walther and Trevor Hastie. The methodology compares the total within intra-cluster variation ("WSS") for different values of k relative to a random uniform distribution of the data (that has no obvious clustering). The optimal cluster value of k has the largest gap statistic because signifies the cluster infrastructure furthest from the random uniform point distribution.
+
+```{r}
+cluster_optimal[[3]]
+```
+
+**Multiple indexes**
+
+The NbClust package by Malika Charrad, Nadia Ghazzali and Azam Niknafs calculates the optimal K using 30 methodologies and aggregates into an index. The package equal-weightes each methodology and presents results in a histogram. The suggested optimal k is the k with the most optimizations across the 30 index methodologies.
+
+```{r}
+library (NbClust)
+cluster_30_indexes <- NbClust(data = penguins[5:7], distance = "euclidean", min.nc = 2, max.nc = 9, method = "complete", index ="all")
+```
+
+
+### Conclusion
+
+The kmeans study indicates penguin size is optimally grouped into 3 clusters. The quantitative tests were no more conclusive with three clusters recommmended by the elbow and gap statistic tests while two clusters by the silhoutte algorithm. The 30 index package tipped the results toward 3.
+

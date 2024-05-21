@@ -1,0 +1,85 @@
+---
+title: "NMDS-NonMetric Multidimensional Scaling"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Often in ecological research, we are interested not only in comparing univariate descriptors of communities, like diversity , but also in how the constituent species — or the composition — changes from one community to the next.
+
+One common tool to do this is non-metric multidimensional scaling, or NMDS. The goal of NMDS is to collapse information from multiple dimensions (e.g, from multiple communities, sites, etc.) into just a few, so that they can be visualized and interpreted. Unlike other ordination techniques that rely on (primarily Euclidean) distances, such as Principal Coordinates Analysis, NMDS uses rank orders, and thus is an extremely flexible technique that can accommodate a variety of different kinds of data.
+
+The NMDS procedure is iterative and takes place over several steps:
+
+1. Define the original positions of communities in multidimensional space.
+2. Specify the number of reduced dimensions (typically 2).
+3. Construct an initial configuration of the samples in 2-dimensions.
+4. Regress distances in this initial configuration against the observed (measured) distances.
+5. Determine the stress, or the disagreement between 2-D configuration and predicted values from the regression. If the 2-D configuration perfectly preserves the original rank orders, then a plot of one against the other must be monotonically increasing. The extent to which the points on the 2-D configuration differ from this monotonically increasing line determines the degree of stress. This relationship is often visualized in what is called a Shepard plot.
+6. If stress is high, reposition the points in 2 dimensions in the direction of decreasing stress, and repeat until stress is below some threshold.**A good rule of thumb: stress < 0.05 provides an excellent representation in reduced dimensions, < 0.1 is great, < 0.2 is good/ok, and stress < 0.3 provides a poor representation.**
+
+```{r}
+#install.packages("vegan")
+library(vegan)
+set.seed(2)
+community_matrix=matrix(
+   sample(1:100,300,replace=T),nrow=10,
+   dimnames=list(paste("community",1:10,sep=""),paste("sp",1:30,sep="")))
+
+example_NMDS=metaMDS(community_matrix, # Our community-by-species matrix
+                     k=2) # The number of reduced dimensions
+```
+
+```{r}
+example_NMDS=metaMDS(community_matrix,k=2,trymax=100)
+```
+You’ll see that metaMDS has automatically applied a square root transformation and calculated the Bray-Curtis distances for our community-by-site matrix.
+
+Let’s examine a Shepard plot, which shows scatter around the regression between the interpoint distances in the final configuration (i.e., the distances between each pair of communities) against their original dissimilarities.
+
+```{r}
+stressplot(example_NMDS)
+```
+
+Large scatter around the line suggests that original dissimilarities are not well preserved in the reduced number of dimensions. Looks pretty good in this case.
+
+Now we can plot the NMDS. The plot shows us both the communities (“sites”, open circles) and species (red crosses), but we don’t know which circle corresponds to which site, and which species corresponds to which cross.
+
+```{r}
+plot(example_NMDS)
+```
+
+We can use the function ordiplot and orditorp to add text to the plot in place of points to make some sense of this rather non-intuitive mess.
+
+```{r}
+ordiplot(example_NMDS,type="n")
+orditorp(example_NMDS,display="species",col="red",air=0.01)
+orditorp(example_NMDS,display="sites",cex=1.25,air=0.01)
+```
+
+Let’s suppose that communities 1-5 had some treatment applied, and communities 6-10 a different treatment. We can draw convex hulls connecting the vertices of the points made by these communities on the plot. I find this an intuitive way to understand how communities and species cluster based on treatments.
+
+```{r}
+treat=c(rep("Treatment1",5),rep("Treatment2",5))
+ordiplot(example_NMDS,type="n")
+ordihull(example_NMDS,groups=treat,draw="polygon",col="grey90",label=F)
+orditorp(example_NMDS,display="species",col="red",air=0.01)
+orditorp(example_NMDS,display="sites",col=c(rep("green",5),rep("blue",5)),
+   air=0.01,cex=1.25)
+```
+
+If the treatment is continuous, such as an environmental gradient, then it might be useful to plot contour lines rather than convex hulls. We can simply make up some, say, elevation data for our original community matrix and overlay them onto the NMDS plot using ordisurf:
+
+```{r}
+# Define random elevations for previous example
+elevation=runif(10,0.5,1.5)
+# Use the function ordisurf to plot contour lines
+ordisurf(example_NMDS,elevation,main="",col="forestgreen")
+# Finally, display species on plot
+orditorp(example_NMDS,display="species",col="grey30",air=0.1,
+   cex=1)
+```

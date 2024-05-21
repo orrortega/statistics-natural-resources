@@ -1,0 +1,156 @@
+---
+title: "CLMM - Cumulative Link Mixed Model"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ordinal)
+```
+
+```{r}
+data(wine)
+str(wine)
+```
+
+The data represent a factorial experiment on factors determining the bitterness of wine with 1 = “least bitter” and 5 = “most bitter”. Two treatment factors (temperature and contact) each have two levels. Temperature and contact between juice and skins can be controlled
+when crushing grapes during wine production. Nine judges each assessed wine from two bottles from each of the four treatment conditions, hence there are 72 observations in all.
+
+We will fit the following cumulative link mixed model to the wine data:
+
+$$logit(P(Y_{i} \leq j)) = \theta_{j} - \beta_{1}(temp_{i}) - \beta_{2}(contact_{i}) - u(judge_{i})$$
+$$i = 1, . . . , n, j = 1, . . . , J - 1$$
+
+This is a model for the cumulative probability of the $ith$ rating falling in the $jth$ category or below, where $i$ index all observations and $j = 1, . . . , J$ index the response categories (J = 5). $\theta_{j}$ are known as threshold parameters or cut-points. We take the judge effects to be random, and assume that the judge effects are IID normal: $u(judge_{i}) \sim N(0, \sigma_{u}^2)$.
+
+We fit this model with the clmm2 function in package ordinal. Here we save the fitted clmm2 model in the object fm1 (short for fitted model 1) and print the model by simply typing its name:
+
+```{r}
+fm1 <- clmm2(rating ~ temp + contact, random=judge, data=wine)
+fm1
+```
+
+Maximum likelihood estimates of the parameters are provided using the Laplace approximation to compute the likelihood function. A more accurate approximation is provided by the adaptive Gauss-Hermite quadrature method. Here we use 10 quadrature nodes and use the summary method to display additional information:
+
+```{r}
+fm2 <- clmm2(rating ~ temp + contact, random=judge, data=wine,Hess=TRUE, nAGQ=10)
+summary(fm2)
+```
+
+The small changes in the parameter estimates show that the Laplace approximation was in fact rather accurate in this case. Observe that we set the option Hess = TRUE. This is needed if we want to use the summary method since the Hessian is needed to compute standard errors of the model coefficients.
+
+The results contain the maximum likelihood estimates of the parameters:
+
+$$\hat{\beta_{1}} = 3.06; \hat{\beta_{2}} = 1.83; \hat{\sigma_{u}}^2 = 1.29 = 1.132; , \hat{\theta_{j}} = [-1.62, 1.51, 4.23, 6.09]$$
+Observe the number under Std.Dev for the random effect is not the standard error of the random effects variance, Var. Rather, it is the standard deviation of the random effects, i.e., it is the square root of the variance. 
+
+The condition number of the Hessian measures the empirical identifiability of the model. High numbers, say larger than 10^4 or 10^6 indicate that the model is ill defined. This would indicate that the model can be simplified, that possibly some parameters are not identifiable, and that optimization of the model can be difficult. In this case the condition number of the Hessian does not indicate a problem with the model.
+
+The coefficients for temp and contact are positive indicating that higher temperature and more contact increase the bitterness of wine, i.e., rating in higher categories is more likely.
+
+The odds ratio of the event $P(Y_{i} \leq j)) is \exp(\beta_{treatment})$, thus the odds ratio of bitterness being rated in category j or above at warm relative to cold temperatures is
+
+```{r}
+exp(coef(fm2)[5])
+```
+
+The *p*-values for the location coefficients provided by the summary method are based on the so-called Wald statistic. More accurate test are provided by likelihood ratio tests. These can be obtained with the anova method, for example, the likelihood ratio test of contact
+is
+```{r}
+fm3 <- clmm2(rating ~ temp, random=judge, data=wine, nAGQ=10)
+anova(fm3, fm2)
+```
+
+which in this case is slightly more significant. The Wald test is not reliable for variance parameters, so the summary method does not provide a test of $\sigma_{u}$, but a likelihood ratio test can be obtained with anova:
+
+```{r}
+fm4 <- clm2(rating ~ temp + contact, data=wine)
+anova(fm4, fm2)
+```
+
+showing that the judge term is significant. Since this test of $\sigma_{u}$ = 0 is on the boundary of the parameter space (a variance cannot be negative), it is often argued that a more correct p-value is obtained by halving the *p*-value produced by the conventional likelihood ratio test. In this case halving the *p*-value is of little relevance. 
+
+A profile likelihood confidence interval of $\sigma_{u}$ is obtained with
+
+```{r}
+pr2 <- profile(fm2, range=c(.1, 4), nSteps=30, trace=0)
+confint(pr2)
+```
+
+The profile likelihood can also be plotted:
+```{r}
+plot(pr2)
+```
+Where horizontal lines indicate 95% and 99% confindence bounds. Clearly the profile likelihood function is asymmetric and symmetric confidence intervals would be inaccurate.
+
+```{r}
+ci <- fm2$ranef + qnorm(0.975) * sqrt(fm2$condVar) %o% c(-1, 1)
+ord.re <- order(fm2$ranef)
+ci <- ci[order(fm2$ranef),]
+plot(1:9, fm2$ranef[ord.re], axes=FALSE, ylim=range(ci),
+xlab="Judge", ylab="Judge effect")
+axis(1, at=1:9, labels = ord.re)
+axis(2)
+for(i in 1:9) segments(i, ci[i,1], i, ci[i, 2])
+abline(h = 0, lty=2)
+```
+
+The seventh judge gave the lowest ratings of bitterness while the first judge gave the highest ratings of bitterness. The significant judge effect indicate that judges perceived the bitterness of the wines differently. Two natural interpretations are that either a bitterness of, say, 3 means different things to different judges, or the judges actually perceived the bitterness of the wines differently. Possibly both effects play their part.
+
+```{r}
+head(cbind(wine, fitted(fm2)))
+```
+
+```{r}
+head(cbind(wine, pred=predict(fm2, newdata=wine)))
+```
+
+Model (1) says that for an average judge at cold temperature the cumulative probability of a bitterness rating in category j or below is
+
+$$P(Yi \leq j) = logit^{-1} [\theta_{j} - \beta_{2}(contact_{i})]$$
+Judge effects are random and normally distributed, so an average judge effect is 0. Extreme judge effects, say 5th and 95th percentile judge effects are given by
+
+```{r}
+qnorm(0.95) * c(-1, 1) * fm2$stDev
+```
+
+At the baseline experimental conditions (cold and no contact) the probabilites of bitterness ratings in the five categories for a 5th percentile judge is
+
+```{r}
+pred <-
+function(eta, theta, cat = 1:(length(theta)+1), inv.link = plogis)
+{
+Theta <- c(-1e3, theta, 1e3)
+sapply(cat, function(j)
+inv.link(Theta[j+1] - eta) - inv.link(Theta[j] - eta) )
+}
+pred(qnorm(0.05) * fm2$stDev, fm2$Theta)
+```
+
+We can compute these probabilities for average, 5th and 95th percentile judges at the four experimental conditions. 
+
+```{r}
+mat <- expand.grid(judge = qnorm(0.95) * c(-1, 0, 1) * fm2$stDev,
+contact = c(0, fm2$beta[2]),
+temp = c(0, fm2$beta[1]))
+pred.mat <- pred(eta=rowSums(mat), theta=fm2$Theta)
+lab <- paste("contact=", rep(levels(wine$contact), 2), ", ",
+"temp=", rep(levels(wine$temp), each=2), sep="")
+par(mfrow=c(2, 2))
+for(k in c(1, 4, 7, 10)) {
+plot(1:5, pred.mat[k,], lty=2, type = "l", ylim=c(0,1),
+xlab="Bitterness rating scale", axes=FALSE,
+ylab="Probability", main=lab[ceiling(k/3)], las=1)
+axis(1); axis(2)
+lines(1:5, pred.mat[k+1, ], lty=1)
+lines(1:5, pred.mat[k+2, ], lty=3)
+legend("topright",
+c("avg. judge", "5th %-tile judge", "95th %-tile judge"),
+lty=1:3, bty="n")
+}
+```

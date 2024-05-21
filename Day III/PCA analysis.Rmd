@@ -1,0 +1,194 @@
+---
+title: "PCA"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+
+```{r}
+##install packages
+library(palmerpenguins)
+library(corrr)
+library(GGally)
+library(recipes)
+library(tidytext)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+theme_set(theme_minimal())
+```
+
+## Correlation matrix
+
+
+```{r message=FALSE, warning=FALSE}
+library(corrr)
+penguins_corr <- penguins %>%
+  dplyr::select(where(is.numeric)) %>%
+  correlate() %>%
+  rearrange()
+penguins_corr
+```
+
+Body mass and flipper length appear highly correlated, but neither of the bill variables appears to be as highly correlated with any other variables.
+
+## Pairwise plot matrix
+
+```{r message=FALSE, warning=FALSE}
+penguins %>%
+  select(species, where(is.numeric)) %>% 
+  GGally::ggpairs(aes(color = species),
+          columns = c("flipper_length_mm", "body_mass_g", 
+                      "bill_length_mm", "bill_depth_mm")) +
+  scale_colour_manual(values = c("darkorange","purple","cyan4")) +
+  scale_fill_manual(values = c("darkorange","purple","cyan4"))
+```
+
+## Principal component analysis (PCA)
+
+First, we’ll also use a few recipe steps to preprocess the data for PCA; namely, we need to:
+
+* remove any NA values,
+* center all predictors, and
+* scale all predictors.
+
+```{r}
+library(recipes)
+penguin_recipe <-
+  recipe(~., data = penguins) %>% 
+  update_role(species, island, sex, new_role = "id") %>% 
+  step_naomit(all_predictors()) %>% 
+  step_normalize(all_predictors()) %>%
+  step_pca(all_predictors(), id = "pca") %>% 
+  prep()
+
+penguin_pca <- 
+  penguin_recipe %>% 
+  tidy(id = "pca") 
+
+penguin_pca
+```
+The value column here is the loading. For each component, the value tells us the linear combination of weights for each variable that contributes to that component.
+
+```{r}
+penguins %>% 
+  dplyr::select(where(is.numeric)) %>% 
+  tidyr::drop_na() %>% 
+  scale() %>% 
+  prcomp() %>%  
+  .$rotation
+```
+
+We can also examine how much variance each component accounts for:
+
+```{r message=FALSE, warning=FALSE}
+penguin_recipe %>% 
+  tidy(id = "pca", type = "variance") %>% 
+  dplyr::filter(terms == "percent variance") %>% 
+  ggplot(aes(x = component, y = value)) + 
+  geom_col(fill = "#b6dfe2") + 
+  xlim(c(0, 5)) + 
+  ylab("% of total variance")
+```
+
+## Plot PCA loadings
+
+```{r}
+library(ggplot2)
+penguin_pca %>%
+  mutate(terms = tidytext::reorder_within(terms, 
+                                          abs(value), 
+                                          component)) %>%
+  ggplot(aes(abs(value), terms, fill = value > 0)) +
+  geom_col() +
+  facet_wrap(~component, scales = "free_y") +
+  tidytext::scale_y_reordered() +
+  scale_fill_manual(values = c("#b6dfe2", "#0A537D")) +
+  labs(
+    x = "Absolute value of contribution",
+    y = NULL, fill = "Positive?"
+  )
+```
+
+## Plot PCA loadings + scores
+
+We have the PCA loadings in penguin_pca. But we need them in a wide format now for plotting.
+
+# get pca loadings into wider format
+```{r}
+pca_wider <- penguin_pca %>% 
+  tidyr::pivot_wider(names_from = component, id_cols = terms)
+```
+
+We also need to go back to our prepped penguin recipe, prepped_penguins, and recipes::juice() it to get the PCA scores back.
+
+The results of a PCA can best be viewed as a biplot. This shows
+
+the observations in the space of PC1 and PC2. Data ellipses for each color show the within-species variation.
+the pengiun size variables are represented as vectors from the origin. The angles they make with the PC1 and PC2 axes reflect their correlations with the principal components.
+
+```{r message=FALSE, warning=FALSE}
+library(ggfortify)
+cbp1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+penguins_prep <- penguins %>%
+  remove_missing() %>%
+  select(bill_length_mm:body_mass_g)
+penguins_pca <- penguins_prep %>%
+  prcomp(scale. = TRUE)
+penguins_km <- penguins_prep %>%
+  kmeans(3)
+autoplot(penguins_pca, 
+                data = penguins %>% remove_missing(), 
+                colour = 'species',
+                shape = 'species',
+                loadings = TRUE, 
+                loadings.colour = 'blue',
+                loadings.label = TRUE, 
+                loadings.label.size = 3) +
+      scale_color_manual(values = cbp1) +
+  scale_fill_manual(values = cbp1) +
+  theme_bw() +
+            labs(
+            title = "Biplot PCA", 
+            caption = "Source: https://github.com/allisonhorst/palmerpenguins")
+```
+
+
+First, if you focus on the x-axis showing us the first principal component, you can see that flipper length and body mass are very important (confirming what we saw in the above bar chart). Along this dimension, Gentoo penguins stand out clearly from the other two species. We can confirm this looking at summary statistics:
+
+```{r message=FALSE, warning=FALSE}
+penguins %>% 
+  group_by(species) %>% 
+  summarize(across(c(flipper_length_mm, body_mass_g), 
+                   mean, 
+                   na.rm = TRUE))
+```
+
+```{r}
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g, colour = species)) +
+  geom_point() +
+  scale_colour_manual(values = c("darkorange","purple","cyan4")) 
+```
+
+If you now focus more on the y-axis showing us the second principal component, you can see that our two bill size variables, bill_length_mm and bill_depth_mm, are very important (again, confirming what we saw in the above bar chart).
+
+We can confirm this by glancing at summary statistics again by species:
+
+```{r message=FALSE, warning=FALSE}
+penguins %>% 
+  group_by(species) %>% 
+  summarize(across(c(bill_depth_mm, bill_length_mm), 
+                   mean, 
+                   na.rm = TRUE))
+```
+
+```{r}
+ggplot(penguins, aes(x = bill_length_mm, y = bill_depth_mm, colour = species)) +
+  geom_point() +
+  scale_colour_manual(values = c("darkorange","purple","cyan4")) 
+```
+
+This is actually a pretty neat scatterplot—it highlights a perfect example of why you’d need the combination of two variables to differentiate between these three species. Comparing distributions for any single variable only differentiates one species from the other two.
+

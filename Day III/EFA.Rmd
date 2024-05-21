@@ -1,0 +1,223 @@
+---
+title: "Exploratory Factor Analysis - Basic"
+author: 
+- O Rodriguez de Rivera Ortega, PhD\newline
+- University of Exeter
+---
+
+Factor Analysis (FA) is an exploratory data analysis method used to search influential underlying factors or latent variables from a set of observed variables. It helps in data interpretations by reducing the number of variables. It extracts maximum common variance from all variables and puts them into a common score.
+
+```{r message=FALSE, warning=FALSE}
+library(psych)
+library(ggplot2)
+library(corrplot) #plotting correlation matrices
+library(GPArotation) #methods for factor rotation
+library(nFactors)  #methods for determining the number of factors
+```
+
+### Choosing the number of factors, etc…
+
+
+Prelim - Reading in Repeated Measures Data
+
+```{r}
+#Reading the data from web location
+#set filepath for data file
+filepath <- "https://quantdev.ssri.psu.edu/sites/qdev/files/ptechdata.csv"
+#read in the .csv file using the url() function
+pdat <- read.csv(file=filepath,header=TRUE)
+```
+
+Lets split the data and remove the id variable
+```{r}
+#splitting data
+pdat1 <- pdat[pdat$id==1,-1] 
+pdat2 <- pdat[pdat$id==2,-1]
+```
+
+Lets have a quick look at the first sample and the descriptives.
+```{r}
+#data structure
+head(pdat1,10)
+```
+```{r}
+#descriptives
+describe(pdat1)
+```
+Data appear to already be in standardized form.
+
+Lets look at the raw data.
+
+```{r}
+pairs.panels(pdat1)
+```
+The research question is - can these data be represented by a smaller number of factors?
+
+Store and examine the correlation matrices
+
+```{r}
+#correlation matrix
+round(cor(pdat1),2)
+```
+
+```{r}
+corrplot(cor(pdat1), order = "original", tl.col='black', tl.cex=.75) 
+```
+
+We see three “groups” of variables that are positively correlated. This gives us hope.
+
+Traditionally, EFA was an analysis of a correlation matrix. Most programs now can also read the raw data directly. We make the correlation matrix to be explicit (and so that we know how that matrix was made - e.g, how the missing data were treated). #Store the correlation matrix of the data into an object
+
+```{r}
+corpdat1 <- cor(pdat1, use="pairwise.complete.obs")
+corpdat1
+```
+
+We can inform our choice of number of factors with a number of functions. We can use fa.parallel() in the psych package, or the nScree() function in the nScree package.
+
+```{r}
+#parallel analysis for number of factors 
+fa.parallel(x=corpdat1, fm="minres", fa="fa")
+```
+
+```{r}
+#multiple methods for number of factors
+nScree(x=corpdat1,model="factors")
+```
+```{r}
+plot(nScree(x=corpdat1,model="factors"))
+```
+The output here is number of components/factors according to optimal coordinates (noc), acceleration factor (naf), parallel analysis (nparallel), and Kaiser rule (nkaiser).
+
+For these data - everything points to choice of 3 factors.
+
+Now lets run the factor analysis. This time we use the fa() in the psych package, with oblique oblimin rotation (rotate=“oblimin”) and principal factor extraction (fm=“pa”).
+
+```{r}
+EFApdat1_3factor <- fa(r = corpdat1, nfactors = 3, 
+                       rotate = "oblimin", 
+                       fm = "pa")
+EFApdat1_3factor
+```
+The solution looks pretty good.
+
+Our objective here was data reduction. To make that explicit, we can obtain the factor scores by inputing the raw data matrix instead of the correlation matrix. Additionally, we can specify the ‘scores’ argument as below to get factor scores by a factor score regression method. To get estimated factor scores we must input the raw data.
+
+```{r}
+EFApdat1_3factor <- fa(r = pdat1, nfactors = 3, 
+                       rotate = "oblimin", 
+                       fm = "pa",
+                       scores="regression")
+head(EFApdat1_3factor$scores,10)
+```
+Lets look at the “reduced” data.
+```{r}
+pairs.panels(EFApdat1_3factor$scores)
+```
+But do not forget that there are also unique factors too. The factors only capture common variance. There may be quite a bit of stuff left over.
+
+Remember that the variance accounted for by the 3 factors is only part of the total variance. Specifically, 0.499181, which we see in the main output
+```{r}
+EFApdat1_3factor$Vaccounted[3,3]
+```
+All the other parts are in the uniquenesses and misfit.
+```{r}
+#Uniquenesses
+round(EFApdat1_3factor$uniquenesses,3)
+```
+```{r}
+#residuals (diagonal removed)
+round(EFApdat1_3factor$residual - EFApdat1_3factor$uniquenesses,3)
+```
+Intersample comparisons -
+We can look at the comparison of the factor solutions in a second sample (e.g., cross-validation).
+
+Lets run the factor analysis on our second sample, pdat2. First we should check if the number of factors is the same.
+```{r}
+#correlation matrix
+round(cor(pdat2),2)
+```
+
+```{r}
+#parallel analysis for number of factors 
+fa.parallel(x=pdat2, fm="minres", fa="fa")
+```
+```{r}
+#multiple methods for number of factors
+nScree(x=pdat2,model="factors")
+```
+```{r}
+plot(nScree(x=pdat2,model="factors"))
+```
+The information points towards 2 factors. What are those eigen values?
+
+```{r}
+eigen(cor(pdat2))$values
+```
+
+```{r}
+#2-factor model
+EFApdat2_2factor <- fa(r = pdat1, nfactors = 2, 
+                       rotate = "oblimin", 
+                       fm = "pa",
+                       scores="regression")
+EFApdat2_2factor
+```
+```{r}
+#3-factor model
+EFApdat2_3factor <- fa(r = pdat1, nfactors = 3, 
+                       rotate = "oblimin", 
+                       fm = "pa",
+                       scores="regression")
+EFApdat2_3factor
+```
+Let’s go with the 3 factor solution. It looks a bit better all around.
+
+With the same size p x q factor loading matrix for the two samples (here 9 x 3), we can compare the pattern of loadings between the two samples using the Tucker Index of Factor Congruence.
+
+This is easily obatined by applying the factor.congruence function in the psych package to two factor loading matrices.
+```{r}
+fa.congruence(EFApdat1_3factor,EFApdat2_3factor)
+```
+
+We see very good alignment across the two samples!
+
+We’ve done something clever here to make a point. These two samples are actually two different persons, each of whom completed 100 days of reports (repeated measures). We have actually conducted two person-specific factor analyses. The mechanics of cross-sectional factor analysis (R-technique) and (P-technique) are identical - just the data and interpretation are different.
+
+Our data reduction has allowed us to reduce the complexity of the 9-dimensional data.
+```{r}
+#preparing data
+day <- 1:100
+str(day)
+```
+
+```{r}
+pdat1_plot <- cbind(day,pdat1,EFApdat1_3factor$scores)
+#Plotting observed scores
+ggplot(data=pdat1_plot, aes(x=day)) +
+  geom_line(aes(y=v1), color= 1) + 
+  geom_line(aes(y=v2), color= 2) + 
+  geom_line(aes(y=v3), color= 3) + 
+  geom_line(aes(y=v4), color= 4) + 
+  geom_line(aes(y=v5), color= 5) + 
+  geom_line(aes(y=v6), color= 6) + 
+  geom_line(aes(y=v7), color= 7) + 
+  geom_line(aes(y=v8), color= 8) + 
+  geom_line(aes(y=v9), color= 9) +
+  xlab("Day") + ylab("Observed Score") + 
+  scale_x_continuous(limits=c(0,100)) +
+  scale_y_continuous(limits=c(-3,3)) 
+```
+
+to 3-dimensional data - by setting aside 50% of the variance.
+
+```{r}
+#Plotting factor scores
+ggplot(data=pdat1_plot, aes(x=day)) +
+  geom_line(aes(y=PA1), color= 1) + 
+  geom_line(aes(y=PA2), color= 2) + 
+  geom_line(aes(y=PA3), color= 3) + 
+  xlab("Day") + ylab("Factor Score") + 
+  scale_x_continuous(limits=c(0,100)) +
+  scale_y_continuous(limits=c(-3,3)) 
+```
