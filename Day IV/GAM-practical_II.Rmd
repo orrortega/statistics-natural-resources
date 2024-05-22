@@ -1,0 +1,305 @@
+---
+title: "Another example of GAMs"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment=NA, collapse=T, autodep=T, 
+                      fig.align='center',
+                      dev.args=list(pointsize=9), size ='tiny',
+                      fig.width=4, fig.height=2.5,
+                      message=F, warning=F, autodep=T)
+```
+
+# Preliminaries
+
+In this session, we will complete GAMs by considering another example of Generalised Additive Models. In the last session we showed that in practice, the fitting and inference for Generalised Additive Models (GAMs) is similar to that of Generalised Linear Models (GLMs). This session will show another example of GAMs, and in particular how you might want to model interactions and why sometimes we may need to apply subjective reasoning rather than relying on model inference. All practical aspects will be done using the `munichrent` dataframe. This can be found in `datasets.RData` on the course ELE page and can be loaded into `R` using the `load()` function. 
+
+```{r}
+# Loading datasets required
+load('datasets.RData')
+```
+
+We also need the `mgcv` package which will help us fit Generalised Additive Models. We use the `install.packages()` function to download and install the most recent package and use the `library()` function to load them into the `R` library.
+
+```{r, eval = FALSE}
+# Installing required packages
+#install.packages("mgcv")
+
+# Loading required packages into the library
+library(mgcv)
+```
+```{r, echo = FALSE}
+# Loading required packages into the library
+library(mgcv)
+```
+
+# Example: `munichrent` dataframe
+
+The example that we consider in this session is the `munichrent` dataframe, which contains data on the price of rent per week (in euros) collected for 3082 apartments in Munich. The dataset also contains the year of construction for the apartments, a location index (1 indicating a deprived neighbourhood, 2 for average neighbourhood and 3 indicting a affluent neighbourhood) and an identifier of the district the flat is located in. Interest lies in how rent prices vary by the year of construction and the location index. 
+
+```{r, fig.width = 8, fig.height = 3.5}
+# Fist 6 rows of munichrent
+head(munichrent)
+
+# Summarising the dataset
+summary(munichrent)
+```
+
+Let's start by fitting a Normal GLM to model rent prices in terms of year of construction and location index and an interaction between the both. (We wont write out the model here as it involves factors)
+
+```{r, fig.width = 5}
+# Fit a linear model
+model1 <- glm(rent ~ yearc + location + yearc:location,
+             data = munichrent,
+             family = gaussian(link = 'identity'))
+
+# Summarise the model 
+summary(model1)
+
+## Check residuals
+par(mfrow=c(1,2),mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+plot(model1,1,pch=20)
+plot(model1,2,pch=20)
+```
+
+We can see that the model  fit is quite poor, the QQ plot shows severe deviation from the line. The reason for that might be that rent prices are positive values and we are assuming a Normal GLM which might be inappropriate here. So lets change approach and model the rent prices using a Gamma GLM with an identity link
+
+```{r, fig.width = 5}
+# Fit a linear model
+model2 <- glm(rent ~ yearc + location + yearc:location,
+             data = munichrent,
+             family = Gamma(link = 'identity'))
+
+# Summarise the model 
+summary(model2)
+
+## Check residuals
+par(mfrow=c(1,2),mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+plot(model2,1,pch=20)
+plot(model2,2,pch=20)
+```
+
+Unfortunately, this does not fit the model, the QQ plot looks near identical. Let's produce some predictions from this model to see what is happening
+
+```{r}
+## Look at predicted values for each location
+years <- 1918:1997
+
+# Predictions for our three types of location
+loc1 <- predict(model2,newdata=data.frame(yearc=years,location=as.factor(1)),se.fit=T)
+loc2 <- predict(model2,newdata=data.frame(yearc=years,location=as.factor(2)),se.fit=T)
+loc3 <- predict(model2,newdata=data.frame(yearc=years,location=as.factor(3)),se.fit=T)
+
+# Plot margins
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+
+# Predictions for location 1
+plot(years,loc1$fit,type="l",ylim=c(320,900),xlab="time (years)",ylab="mean rent")
+lines(years,loc1$fit+1.96*loc1$se.fit,lty=2,lwd=1)
+lines(years,loc1$fit-1.96*loc1$se.fit,lty=2,lwd=1)
+
+# Predictions for location 3
+lines(years,loc2$fit,col="red")
+lines(years,loc2$fit+1.96*loc2$se.fit,lty=2,lwd=1,col="red")
+lines(years,loc2$fit-1.96*loc2$se.fit,lty=2,lwd=1,col="red")
+
+# Predictions for location 3
+lines(years,loc3$fit,col="blue")
+lines(years,loc3$fit+1.96*loc3$se.fit,lty=2,lwd=1,col="blue")
+lines(years,loc3$fit-1.96*loc3$se.fit,lty=2,lwd=1,col="blue")
+
+# add a legend
+legend("topleft",c("Location 1","Location 2","Location 3"),col=c("black","red","blue"),lty=c(1,1,1))
+```
+
+We can see that we linear relationships between rent price and year of construction, which is different for each location index since we included the interaction. The question then becomes, are these relationships linear? It's convenient to model them as linear but they may be non-linear. So now we have a GAM framework we can model these using smooth functions (if they turn out to be linear, great!). However, we can see that the relationships are very different depending on the location index, so how do we get one smooth function for all three locations?
+
+This is a very simple extension to include interactions between smooth functions and factors, as we can use the `by=` argument within the function `s()`.
+
+```{r, fig.height=3.25}
+# Fit as a GAM
+model3 <- gam(rent ~ s(yearc, by = location, k = 10),
+              data = munichrent, 
+              family = Gamma(link="identity"))
+
+# Checking residuals
+par(mfrow=c(2,2))
+gam.check(model3,pch=20)
+```
+
+We can see that the residual plots are looking much better here. The QQ plot follows the indicated line. The residual plot may show a little funnelling (more variable for older houses). In terms of the degrees of freedom for the function, we see that the table now shows three functions, one for each location. The first two of these functions look like they have enough flexibility as the EDF is not close to $k'$, but the third function looks like it may need more flexibility as the EDF is close to $k'$. Let's fit this model again with a higher rank in our functions. 
+
+```{r, fig.height=3.25}
+# Fit as a GAM
+model3 <- gam(rent ~ s(yearc, by = location, k = 30),
+              data = munichrent, 
+              family = Gamma(link="identity"))
+
+# Checking residuals
+par(mfrow=c(2,2))
+gam.check(model3,pch=20)
+```
+
+Residuals looking acceptable, but not perfect. QQ plot suggests perhaps we're not doing particularly well in the tails and there still may be some funnelling in the residual plots. We can see now that the model has enough have enough flexibility as the EDF is not close to $k'$ for all functions. Let's predict from this model 
+
+```{r}
+## Look at predicted values for each location
+years <- 1918:1997
+
+# Predictions for our three types of location
+loc1 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(1)),se.fit=T)
+loc2 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(2)),se.fit=T)
+loc3 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(3)),se.fit=T)
+
+# Plot margins
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+
+# Predictions for location 1
+plot(years,loc1$fit,type="l",ylim=c(0,1100),xlab="time (years)",ylab="mean rent")
+lines(years,loc1$fit+1.96*loc1$se.fit,lty=2,lwd=1)
+lines(years,loc1$fit-1.96*loc1$se.fit,lty=2,lwd=1)
+
+# Predictions for location 3
+lines(years,loc2$fit,col="red")
+lines(years,loc2$fit+1.96*loc2$se.fit,lty=2,lwd=1,col="red")
+lines(years,loc2$fit-1.96*loc2$se.fit,lty=2,lwd=1,col="red")
+
+# Predictions for location 3
+lines(years,loc3$fit,col="blue")
+lines(years,loc3$fit+1.96*loc3$se.fit,lty=2,lwd=1,col="blue")
+lines(years,loc3$fit-1.96*loc3$se.fit,lty=2,lwd=1,col="blue")
+
+# add a legend
+legend("topleft",c("Location 1","Location 2","Location 3"),col=c("black","red","blue"),lty=c(1,1,1))
+```
+
+This looks a mess. Locations 1 and 2 look acceptable, but location 3 is all over the place. We probably don't believe that there is that much variability in the data for location 3. It also predicts negative values for the rent, which is nonsense. Why is this happening? The answer is that we chose the identity link. The model we have just fit is 
+$$Y_i \sim Gamma(\mu_i, \sigma^2)$$
+$$\eta_i = \mu_i = \beta_0 + f_1(x_i) + f_2(x_i) + f_3(x_i)$$
+where $y_i$ is the rent price, $x_i$ is the year of construction and $f_1(\cdot)$, $f_2(\cdot)$ and $f_3(\cdot)$ are functions of $x_i$ for each location index. There is nothing in this that will constrain $\mu_i$ to be positive so it predicts negative values. This would also be the case if we used the inverse link 
+$$\eta_i = \frac{1}{\mu_i} = \beta_0 + f_1(x_i) + f_2(x_i) + f_3(x_i)$$
+You will often see this that outside the range of the data (and where you have little data). In some cases we may need to reconsider our approach and change the link function to avoid problems like this. If we need something to be positive we use the log link, exactly like in Poisson models. 
+$$\eta_i = \log(\mu_i) = \beta_0 + f_1(x_i) + f_2(x_i) + f_3(x_i)$$
+Let's rerun our model with a log link. 
+```{r, fig.height=3.25}
+# Fit as a GAM
+model3 <- gam(rent ~ s(yearc, by = location, k = 30),
+              data = munichrent, 
+              family = Gamma(link="log"))
+
+# Checking residuals
+par(mfrow=c(2,2))
+gam.check(model3,pch=20)
+```
+
+The residual plots haven't really changed. QQ plot suggests perhaps we're not doing particularly well in the tails and there still may be some funnelling in the residual plots. The smooth functions still have enough flexibility so lets predict from this model. 
+
+```{r}
+## Look at predicted values for each location
+years <- 1918:1997
+
+# Predictions for our three types of location
+loc1 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(1)),se.fit=T)
+loc2 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(2)),se.fit=T)
+loc3 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(3)),se.fit=T)
+
+# Plot margins
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+
+# Predictions for location 1
+plot(years,exp(loc1$fit),type="l",ylim=c(0,1100),xlab="time (years)",ylab="mean rent")
+lines(years,exp(loc1$fit+1.96*loc1$se.fit),lty=2,lwd=1)
+lines(years,exp(loc1$fit-1.96*loc1$se.fit),lty=2,lwd=1)
+
+# Predictions for location 3
+lines(years,exp(loc2$fit),col="red")
+lines(years,exp(loc2$fit+1.96*loc2$se.fit),lty=2,lwd=1,col="red")
+lines(years,exp(loc2$fit-1.96*loc2$se.fit),lty=2,lwd=1,col="red")
+
+# Predictions for location 3
+lines(years,exp(loc3$fit),col="blue")
+lines(years,exp(loc3$fit+1.96*loc3$se.fit),lty=2,lwd=1,col="blue")
+lines(years,exp(loc3$fit-1.96*loc3$se.fit),lty=2,lwd=1,col="blue")
+
+# add a legend
+legend("topleft",c("Location 1","Location 2","Location 3"),col=c("black","red","blue"),lty=c(1,1,1))
+```
+
+The log link now has stopped negative values, but the smooth function for location 3 still looks too flexible. It is hard to imagine that rent prices vary by that much over the year of construction. This can happen when you give a function too many degrees of freedom when you don't have enough data. Let's look at the distribution of houses by location index
+
+```{r}
+# Table of location index
+table(munichrent$location)
+```
+
+We can see that we have a lot less apartments in location 3 than we have in locations 1 and 2. Let's look at a summary of rent prices
+
+```{r}
+# Table of location index
+summary(munichrent$rent)
+```
+
+If we look at the model, the mean suggests the rent can go above the maximum and below the minimum. So this is an example where we should use subjective reasoning about having degrees of freedom in our smooth functions (despite the outputs from `gam.check()`). Remember `gam.check()` does not understand the context of your problem, nor does it know if some predicted values are reasonable or not, it is there to indicate that you ***may*** need to alter things. So lets go back a step and put a lower rank of our functions, less than say `gam.check()` would be "happy" with to see if we fit the data better. 
+
+```{r, fig.height=3.25}
+# Fit as a GAM
+model3 <- gam(rent ~ s(yearc, by = location, k = 5),
+              data = munichrent, 
+              family = Gamma(link="log"))
+
+# Checking residuals
+par(mfrow=c(2,2))
+gam.check(model3,pch=20)
+```
+
+The residual plots look OK actually in this case, better than before arguably. The QQ plot looks OK, with some deviation in the tails, but we don't have a lot of data in the extremes. The funneling seems to have disappeared from the residual plots. Some room for improvement but they're acceptable. Let's predict from this model. 
+
+```{r}
+## Look at predicted values for each location
+years <- 1918:1997
+
+# Predictions for our three types of location
+loc1 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(1)),se.fit=T)
+loc2 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(2)),se.fit=T)
+loc3 <- predict(model3,newdata=data.frame(yearc=years,location=as.factor(3)),se.fit=T)
+
+# Plot margins
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+
+# Predictions for location 1
+plot(years,exp(loc1$fit),type="l",ylim=c(0,1100),xlab="time (years)",ylab="mean rent")
+lines(years,exp(loc1$fit+1.96*loc1$se.fit),lty=2,lwd=1)
+lines(years,exp(loc1$fit-1.96*loc1$se.fit),lty=2,lwd=1)
+
+# Predictions for location 3
+lines(years,exp(loc2$fit),col="red")
+lines(years,exp(loc2$fit+1.96*loc2$se.fit),lty=2,lwd=1,col="red")
+lines(years,exp(loc2$fit-1.96*loc2$se.fit),lty=2,lwd=1,col="red")
+
+# Predictions for location 3
+lines(years,exp(loc3$fit),col="blue")
+lines(years,exp(loc3$fit+1.96*loc3$se.fit),lty=2,lwd=1,col="blue")
+lines(years,exp(loc3$fit-1.96*loc3$se.fit),lty=2,lwd=1,col="blue")
+
+# add a legend
+legend("topleft",c("Location 1","Location 2","Location 3"),col=c("black","red","blue"),lty=c(1,1,1))
+```
+
+We can see now that the model is predicting reasonable values of rent within the range of the data. We can interpret these now and that locations 1 and 2 have lower rents for older houses than rents for newer houses. It suggests that the relationship is non-linear. Location 3 seems to be highly non-linear and suggests that you pay more rent in houses built in the 1970s than any other time. This may be reasonable, but we may need some expert knowledge. But note that we have significantly less data for location 3 than 1 or 2 so it may be the case we don't have enough data to estimate this relationship reliably. OR it maybe that affluent areas are much less likely to rent. OR it maybe the case that less modern houses are being built in affluent areas. It will depend on the context of your problem. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

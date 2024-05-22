@@ -1,0 +1,389 @@
+---
+title: "An example of GAMs"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment=NA, collapse=T, autodep=T, 
+                      fig.align='center',
+                      dev.args=list(pointsize=9), size ='tiny',
+                      fig.width=4, fig.height=2.5,
+                      message=F, warning=F, autodep=T)
+```
+
+# Preliminaries
+
+In this session, we will continue with Generalised Additive Models. In the last session we discussed the theory used to extend Generalised Linear Models (GLMs) to Generalised Additive Models (GAMs). Instead of using covariates in a linear and parametric way, we model the relationships between the response as smooth functions of our covariates. This session will show that in practice, fitting and the inference is similar between GLMs and GAMs. All practical aspects will be done using the `globalMeanTemp` dataframe. This can be found in `datasets.RData` on the course ELE page and can be loaded into `R` using the `load()` function. 
+
+```{r}
+# Loading datasets required
+load('datasets.RData')
+```
+
+We also need the `mgcv` package which will help us fit Generalised Additive Models. We use the `install.packages()` function to download and install the most recent package and use the `library()` function to load them into the `R` library.
+
+```{r, eval = FALSE}
+# Installing required packages
+#install.packages("mgcv")
+
+# Loading required packages into the library
+library(mgcv)
+```
+
+
+# Example: `globalMeanTemp` dataframe
+
+The example that we consider in this session is the `globalMeanTemp` dataframe, which contains data collected on monthly temperature anomalies (average global mean temperature minus the mean across the time period) between 1880 and 2013. Interest lies in modelling the temperature anomalies over time and seeing if global mean temperature is increasing. 
+
+```{r, fig.width = 8, fig.height = 3.5}
+# Fist 6 rows of globalMeanTemp
+head(globalMeanTemp)
+
+# Summarising the dataset
+summary(globalMeanTemp)
+
+# Split plot
+par(mfrow = c(1,2))
+
+# Naive estimate of failure probability
+plot(globalMeanTemp$timeStep, globalMeanTemp$temp, pch=20,
+     xlab = 'Time', ylab = 'Temperature anomaly')
+
+# Looking at a boxplot to see if there is a seasonal sycle
+boxplot(temp ~ month, data = globalMeanTemp,
+        xlab = 'Month', ylab = 'Temperature anomaly') 
+```
+
+This is a dataset that is often used to quantify climate change. In that we can see from the plot that the global mean temperature is increasing. From a statistical point of view, it makes sense to model this data using a Normal distribution, but from a modelling point of view, the mean is highly non-linear. The question is, is what does this mean look like and how is it changing over time? And is it true that after you allow for uncertainty the temperature in 1880 is much smaller than the temperatures in 2013? It would be very difficult to consider what form of covariates would be able to capture that relationship, so this is a classic example where we would use a GAM. 
+
+We want to fit a Normal GAM to to the data to see if we can model global mean temperature anomalies with respect to time,
+$$Y_t\sim N(\mu_t, \sigma^2), \;\;\; Y_t \text{ indep.}$$
+$$\eta_t = \mu_t = \beta_0 + f(x_t)$$
+where $y_t$ is the global mean temperature anomalies, $x_t$ is the monthly time step and $t$ is time. This is a GAM and $f(\cdot)$ is a smooth function we want to estimate. Note that we write a $\beta_0$ here, as the `R` will estimate this separately here and center the function $f(\cdot)$ at zero. 
+
+We can fit this model fairly easily in `R` using the `gam()` function. When fitting GAMs, we specify the smooth function we want to fit in the model formula using the `s()` function. We specify the number of knots `k` and the type of basis function `bs` within this function. Let's start with rank 4 (1 parameter for the intercept and 3 for f(x)) and use cubic splines. . We can think of the rank as the total number of "beta" parameters in the model (i.e. this model has four parameters to estimate how the mean depends on x using a smooth function (line)). 
+
+```{r}
+library(mgcv)
+# Fit the model
+Amodel <- gam(temp ~ s(timeStep, k = 4, bs = "cs"),
+              data = globalMeanTemp,
+              family = gaussian(link = "identity"))
+
+# Summarise the model
+summary(Amodel)
+```
+
+The above code has fit the model, estimated the parameters and found an optimal $\lambda$ to penalise the smooth function/likelihood. The output is very similar to a GLM. We now get two tables: (1) for any parametric coefficients we might have in our model (in this case we only have an intercept) and (2) for any smooth function. 
+
+### Parameter inference
+
+The parametric coefficients table works in the same way that it does in a GLM. It reports the estimate and a standard deviation of each of the $\beta$'s as well as performing hypothesis tests testing whether the parameters are significantly different for zero conditional on the smoothing parameter $\lambda$ being known. Remember that for Normal GLMs we perform hypothesis testing (e.g. $H_0: \beta_i = a$) on the basis that if $H_0$ is true
+$$
+T = \frac{\hat{\beta}_i - a}{SE(\hat{\beta}_i)} \sim t_{n-p-1}
+$$
+Since we are using penalised likelihood to fit a Normal GAM we cannot use the number of parameters directly, instead we replace the $p+1$ parameters in our model with the EDF
+$$
+T = \frac{\hat{\beta}_i - a}{SE(\hat{\beta}_i)} \sim t_{n-EDF}
+$$
+The smooth function table just gives us information about any functions we have fit. It does not give us information on the $\beta$'s inside the function, as they are often non-interpretable, it is only the whole function that is. It does report an approximate significance of the function, which gives an $F$-statistic and a corresponding $p$-value from a LRT again conditional on the smoothing parameter $\lambda$ being known
+
+The `gam()` function also estimates/reports more than the output above and we can extract such as the estimate of the Normal variance $\sigma^2$, the rank of the smooth function $f(\cdot)$, the coefficients used in the smoothed function, and the estimate of the smoothing parameter $\lambda$
+
+```{r}
+# Estimate of sig^2
+Amodel$sig2
+
+# The rank of f(x)
+Amodel$rank
+
+# The beta estimates
+Amodel$coefficients
+
+# Estimate of the smoothing parameter
+Amodel$sp
+```
+
+### Prediction 
+
+As we can treat everything output from a GAM model exactly like we would a GLM, after assuming the smoothing parameter $\lambda$ is fixed and known, we can predict in exactly the same way as before. Previously we have predicted the mean function $\mu_i$ using its estimated mean value $\hat{\mu}_i$. This was done by estimating the mean of fitted linear predictor $\hat{\eta}_i$ and transforming back to the mean using the link function $\hat{\mu}_i = g^{-1}(\hat{\eta}_i)$. For our Normal GAM the link function is the identity so 
+$$
+\hat{\mu}_i = \hat{\eta}_i = \hat{\beta}_0 + \hat{f}(x_i)
+$$
+We can predict as before using the `predict()` function in `R` and plotting 
+```{r}
+# Produce fitted line from this model using predict
+xx <- seq(min(globalMeanTemp$timeStep),max(globalMeanTemp$timeStep),length=200)
+
+# Predicting model mean
+yfitAM <- predict(Amodel,newdata=data.frame(timeStep=xx))
+
+# Plotting model results 
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+plot(globalMeanTemp$timeStep,globalMeanTemp$temp,pch=20,
+     xlab = 'Time', ylab = 'Temperature anomaly')
+lines(xx, yfitAM, lwd = 4, col = "blue") 
+```
+
+First, see how a relatively small extension to GLMs, such as adding an unknown non-parametric smooth functions, creates a powerful way to model complex relationships in data without having to make any assumptions. Secondly, from the predictions it looks like we don't have enough flexibility in our mean. In other words, the rank of the model seems too small. It follows the overall trend yes but it is not flexible enough to pick up on the signals of peaks within decades. Given that we have the ability to give this function more flexibility with little extra effort, should we try again? In other words, we chose a rank of 4 for our function, do we think that this is enough? Let's increase the rank to 14 (code not shown) and look again. 
+
+```{r, echo=FALSE}
+# Fit the model
+Amodel2 <- gam(temp ~ s(timeStep, k = 14, bs = "cs"),
+              data = globalMeanTemp,
+              family = gaussian(link = "identity"))
+
+# Produce fitted line from this model using predict
+xx <- seq(min(globalMeanTemp$timeStep),max(globalMeanTemp$timeStep),length=200)
+
+# Predicting model mean
+yfitAM <- predict(Amodel2, newdata=data.frame(timeStep=xx), 
+                  type = 'response', se.fit = TRUE)
+
+# Plotting model results 
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+# Plotting data
+plot(globalMeanTemp$timeStep, globalMeanTemp$temp, pch = 20)
+
+# Predictions and CIs
+lines(xx, yfitAM$fit, col="blue", lwd=4)
+lines(xx, yfitAM$fit+1.96*yfitAM$se.fit, col="red", lwd=2, lty=4)
+lines(xx, yfitAM$fit-1.96*yfitAM$se.fit, col="red", lwd=2, lty=4)
+lines(xx, qnorm(0.025, mean = yfitAM$fit, sd = sqrt(Amodel2$sig2)), col="darkgreen",lwd=2,lty=4)
+lines(xx, qnorm(0.975, mean = yfitAM$fit, sd = sqrt(Amodel2$sig2)), col="darkgreen",lwd=2,lty=4)
+```
+
+We can see that the estimated function is a lot more flexible and wiggly, and captures the data pretty well. Bear in mind the penalisation has occurred in the background so we don't have to worry about this becoming too wiggly as the penalty will stop this from happening.
+
+Remember though the mean $\hat{\mu}_i$ will have some uncertainty around it due to uncertainty in our model parameters, which we can represent in our model through confidence intervals (CIs). Previously we estimated 95% confidence intervals (CIs) for the mean linear predictor ($\hat{\eta}_i$) using the following 
+$$\hat{\eta}_i \pm 1.96 \times \times SE(\hat{\eta}_i)$$
+We then transformed the CI around the linear predictor back to the mean scale using the link function
+$$g^{-1}(\hat{\eta}_i \pm 1.96 \times \times SE(\hat{\eta}_i))$$ 
+For our Normal GAM the link function is the identity so we see that a 95% CI for the mean $\hat{\mu}_i$
+$$
+\hat{\mu}_i \pm 1.96\times SE(\hat{\mu}_i)
+$$
+We again use the `predict()` function to estimate $\mu_i$ and $SE(\hat{\mu}_i)$ in order to construct 95% CIs.
+
+```{r}
+#### Now, conditional of the penalty parameters, we can do some inference on our final model, Amodel3:
+## Start by putting some confidence intervals about the mean of Amodel3
+## As with GLMs, we use predict to get estimates and standard errors:
+# Predictions and CIs
+preds <- predict(Amodel2, newdata = data.frame(timeStep = xx),
+                 se.fit = T)
+
+# Plotting data
+plot(globalMeanTemp$timeStep, globalMeanTemp$temp, pch = 20)
+
+# Predictions and CIs
+lines(xx,preds$fit,col="blue",lwd=4)
+lines(xx,preds$fit+1.96*preds$se.fit,col="red",lwd=2,lty=4)
+lines(xx,preds$fit-1.96*preds$se.fit,col="red",lwd=2,lty=4)
+```
+
+We can see that the CIs are pretty narrow for our model. This is because there is a lot of data used in our model, so the model can be pretty certain that the mean is between the values it estimates.  
+
+Remember though, CIs tell us nothing about predicting the data $Y_i$, it tells us about the average temperature anomaly. If we want an intervals which tells us what range of values the temperature anomaly will be for given year we will have to use prediction intervals (PIs). From Topics 1 and 2, we used the properties (mean and quantiles) of the data generating process to estimate PIs around the data $Y_i$. To generate these for our model, we can use outputs from the `predict()` function inside the `qnorm()` function to do this.
+
+```{r}
+# Predictions and SE for our mean values 
+preds <- predict(Amodel2, newdata = data.frame(timeStep = xx),
+                 se.fit = T)
+
+# Plotting data
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+plot(globalMeanTemp$timeStep, globalMeanTemp$temp, pch = 20)
+
+# Predictions and CIs
+lines(xx,preds$fit,col="blue",lwd=4)
+lines(xx,preds$fit+1.96*preds$se.fit,col="red",lwd=2,lty=4)
+lines(xx,preds$fit-1.96*preds$se.fit,col="red",lwd=2,lty=4)
+lines(xx, qnorm(0.025, mean = preds$fit, sd = sqrt(Amodel$sig2)), col="darkgreen",lwd=2,lty=4)
+lines(xx, qnorm(0.975, mean = preds$fit, sd = sqrt(Amodel$sig2)), col="darkgreen",lwd=2,lty=4)
+```
+
+So we can see that the PIs  are much wider than CIs and capture most of the data. These tell us more about the data $Y_i$ and can be used to predict reasonable values for what the global mean temperature anomaly should look like for any given year.
+
+### Model and residual checking
+
+We need an objective way of deciding whether we have enough flexibility of our model instead of relying on determining this visually. Luckily there is something that is in the `mgcv` package called `gam.check()` that will help us. Lets use it on our original model with rank 4.
+
+```{r, fig.height = 3.25}
+# 2x2 plot for the residuals
+par(mfrow=c(2,2))
+
+# Runing gam.check on our original model
+gam.check(Amodel,pch=20)
+```
+
+The function will do two things: (1) produce four residual plots and (2) produce a table summarising the smoothed functions within the model.
+
+* The first (top left) plot is the QQ plot (as we've seen before in GLMs) and if the model is a good fit, we should see that the residuals lie on a diagonal line. In the case of our model, it seems to fit very well as nearly every point lies on the diagonal.
+* The second (top right) plot is the residuals vs the fitted values. In this we should not see patterns instead see an even scatter. From our model, we can see a pattern as function does not capture the within decade peaks due to there not being enough flexibility as discussed above.
+* The third (bottom left) plot is a simply a histogram of the residuals, which we would use to see if the residuals follow a $N(0,1)$ distribution. However, since we have the QQ plots, this is a bit useless.
+* The fourth (bottom right) plot is the response ($Y_i$) versus the fitted/predicted values ($\hat{Y}_i$). If your model is a good fit then your points should lie or scatter evenly on a diagonal line. But again since we have the residuals vs the fitted values, this doesn't tell us anything more.
+
+The table shows a summary of the smooth functions we've added to the model. This is what we will use to help us, as it indicates whether more flexibility may be needed in the smooth functions. We get one row in the table for each function in our model.
+
+* The first column in the table displays something called $k'$ which is the number of parameters we have in this function. One of the rank $q$ will typically go to the intercept so it will display $q-1$ generally. In our model we set $q=4$ and we see that $k'=3$.
+* The second columns is the EDF, which in effect tells us "how many parameters from the $k'$ on offer did it use to estimate the function after penalisation". So despite the fact that the our model has been penalised to not overfit the data, we still use nearly all of the 3 degrees of freedom we allowed it by choosing rank 4. This is the first indicator for us that we might need to increase the rank $q$ of the function. As a rule of thumb, if $k'$ and the EDF of a function are less than 1 (i.e. less than one parameter between them) then this indicates that the function may need more degrees of freedom.
+* The third and fourth columns are the k-index and a corresponding $p$-values. These again help us determine and decide whether we need to give the function more flexibility. They're not formal tests, they are just indicators. If k-index is less than 1 (or $p$-value small) then it indicates that the k' is too low. We can see from our model outputs that k-index and the $p$-values are very small, so perhaps we need to increase the rank of the function. These tests aren't formal and despite this we may decide that this function is good enough.
+
+### Increasing the rank
+
+Putting this all together we see that we need to increase the rank of our smooth function. Let's increase it to 10.
+
+```{r, fig.height = 3.25}
+# Fit the model
+Amodel2 <- gam(temp ~ s(timeStep, k = 14, bs = "cs"),
+              data = globalMeanTemp,
+              family = gaussian(link = "identity"))
+
+# 2x2 plot for the residuals
+par(mfrow=c(2,2))
+
+# Runing gam.check on our original model
+gam.check(Amodel2,pch=20)
+```
+
+Looking at the table we see that EDF is still really close to $k'$, the k-index and corresponding $p$-value is also small. Let's compare the model predictions.
+
+```{r}
+# Predicting model mean
+yfitAM2 <- predict(Amodel2,newdata=data.frame(timeStep=xx), se.fit = TRUE)
+
+# Plotting model results
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+plot(globalMeanTemp$timeStep,globalMeanTemp$temp,pch=20,
+     xlab = 'Time', ylab = 'Temperature anomaly')
+lines(xx, yfitAM$fit, lwd = 4, col = "blue")
+lines(xx, yfitAM2$fit, lwd = 4, col = "purple")
+```
+
+We can see that the model is still not flexible enough, so lets increase the rank a lot to 50. Remember, we are allowed to do this, as we can choose something that is too big, as the model will penalise functions for being too flexible.
+
+```{r, fig.height = 3.25}
+# Fit the model
+Amodel3 <- gam(temp ~ s(timeStep, k = 50, bs = "cs"),
+              data = globalMeanTemp,
+              family = gaussian(link = "identity"))
+
+# 2x2 plot for the residuals
+par(mfrow=c(2,2))
+
+# Runing gam.check on our original model
+gam.check(Amodel3,pch=20)
+```
+
+We can see that from the residuals vs the fitted values look much better and that there is more of an even scatter and the patterns that we saw before have largely gone. Looking at the table produced by `gam.check()` then we see that the EDF is not too close to $k'$. This is getting better, and since we see that the difference is greater than 1 we will stikc with this model (despite the k-index and corresponding $p$-value being small). Let's look at the predictions of the model
+
+```{r}
+# Predicting model mean
+yfitAM3 <- predict(Amodel3,newdata=data.frame(timeStep=xx), se.fit = TRUE)
+
+# Plotting model results
+par(mar = c(4, 4, 1, 1),cex=1.2,lwd=2)
+plot(globalMeanTemp$timeStep,globalMeanTemp$temp,pch=20,
+     xlab = 'Time', ylab = 'Temperature anomaly')
+lines(xx, yfitAM$fit, lwd = 4, col = "blue")
+lines(xx, yfitAM2$fit, lwd = 4, col = "purple")
+lines(xx, yfitAM3$fit, lwd = 4, col = "red")
+legend("bottomright",c("Amodel","Amodel2","Amodel3"),lty=c(1,1,1),col=c("blue","purple","red"))
+```
+
+So now that we have a model we're happy with. It seems to pick up the trends in the global mean temperature that we see in the data. The model we've just fit suggests that the global warming seems to flatten out, rather than increasing. This is what climate sceptics did with this data to show that global warming had stopped. This data only goes to 2013, but if you look up to 2020, we see that the trend flattens for a bit before increasing again, which is similar to the trend that we see from previous decades.
+
+### Model checking continued
+
+Once we have checked and happy with our model and the residuals we need to check whether this model fits the data with respect to the saturated model. As this is a Normal GAM, we do not need to check whether this model fits with respect to the saturated model as it has a dispersion parameter. But for models where the dispersion parameter is known (Binomial, Poisson, Exponential) we will need to show that our model $M$ fits using an LRT with respect to the saturated model $M_S$ by testing the following hypotheses (Slide 17 Topic 2 Notes):
+$$H_0: M \text{ is as good as } M_S \;\;\; vs. \;\;\; H_1: M \text{ is NOT as good as } M_S$$
+We saw that if $H_0$ is true then
+$$\frac{D_{M}}{\phi} \sim_{approx} \chi^2_{n-p}$$
+where $D_M$ is the the deviance and $D_M/\phi$ is the scaled deviance (see Slide 18 Topic 2 Notes). Again, as we are using penalised likelihood to fit a GAM we cannot use the number of parameters directly, instead we replace the $p+1$ parameters in our model with the EDF.
+$$\frac{D_{M}}{\phi} \sim_{approx} \chi^2_{n-EDF}$$
+We can extract the residual degrees of freedom ($n-EDF$) from a model output in the same way we did for GLMs ($n-p-1$)
+
+```{r}
+# The model degrees of freedom (analogous to n-p-1 in GLMs) is
+Amodel$df.residual
+```
+
+We can estimate this by hand by extracting the EDF from the model:
+
+```{r}
+# Extracting the model EDF
+Amodel$edf
+
+# Summing the model EDF
+sum(Amodel$edf)
+
+# n-EDF
+nrow(globalMeanTemp) - sum(Amodel$edf)
+```
+
+We can see that the model reports the effective degrees of freedom from each parameter estimated within the model. Any parametric coefficients (like the intercept) will not be penalised and will have 1 degree of freedom. The parameters used in the smoothed function are penalised, so they will not quite count for one parameter (this is what penalising does, it constrains them so they no longer have full freedom). Again we could look at these to see if we need to add more flexibility to our model (if they are close to 1 for function parameters).
+
+If this was a Binomial/Poisson/Exponential model, we would perform a LRT with respect to the saturated model as before
+```{r, eval=FALSE}
+# Perform
+1 - pchisq(Amodel$deviance, Amodel$df.residual)
+```
+If the $p$-value is larger than 0.05 then the model is a good fit CONDITIONAL on the penalty parameters being known. (Remember we do not need to do this for Normal/Gamma GAMs as we estimate a separate dispersion parameter).
+
+### Model comparison
+
+So this is how you would fit a GAM. We can see that once we have fit a GAM, and assume that the smoothing parameter $\lambda$ is known, the inference is very similar to GLMs. It just leaves you with the choice whether you want to model covariates as parametric and linear and or as non-parametric through smooth functions and then comparing and finally selecting your final model. 
+
+At the beginning of this session we produced a boxplot to look to at the distribution of temperature anomalies by month to see if there was a seasonal cycle to the temperature anomalies. Even though there is little to no evidence of one, we can add this to our GAM as another smooth function to see if there is a significant seasonal pattern in the data. We want to therefore model mean global temperature anomalies using the following Normal GAM 
+$$Y_t\sim N(\mu_t, \sigma^2), \;\;\; Y_t \text{ indep.}$$
+$$\eta_t = \mu_t = \beta_0 + f_1(x_{1,t}) + f_2(x_{2,t})$$
+where $y_t$ is the global mean temperature anomalies, $x_{1,t}$ is the monthly time step, $x_{1,t}$ is the month at time $t$. The functions $f_1(\cdot)$ and $f_2(\cdot)$ are smooth functions we want to estimate. We model both functions using cubic splines, except that for month lets add an extra constraint so that the effect is cyclical. This is a simple update to the basis function we specify `bs="cc"` instead of `bs="cs"` inside the `s()` function. We continue with rank 50 for the effect of time and choose rank 5 for our seasonal effect 
+
+```{r}
+# Fit the model
+Amodel4 <- gam(temp~s(timeStep,k=50,bs="cs") + s(month,bs="cc",k=5),
+               data = globalMeanTemp,
+               family = gaussian(link='identity'))
+```
+
+Now, in this model, we have estimated two functions $f_1(\cdot)$ and $f_2(\cdot)$, instead of one. The `gam()` function has penalised both functions and we can look at them as separate model components using the `plot()` function.
+
+```{r, fig.width=5}
+# Visualise the smooth functions at the linear predictor level using plot():
+par(mfrow = c(1,2))
+plot(Amodel4)
+```
+
+Note that for GLMs the `plot()` function returned the residual plots. Now for GAMs, the `plot()` function returns the smooth function and we have seen that we can use the `gam.check()` function to check the residuals. From the plots, we can see that the function for timestep $f_1(\cdot)$ is very similar to the model without season. The function for month $f_2(\cdot)$ is completely flat centred at zero, it is adding nothing to our model. This backs up our thoughts when we looked at the boxplots above. Looking at the summary of the model 
+
+```{r}
+# Summarise the model
+summary(Amodel4)
+```
+
+we can see that the smooth effect of timestep is still highly significant, but the smooth effect of month is not ($p$-value is much greater than 0.05). Once we have multiple models we should compare using the AIC. In Topic 2, we saw that the AIC is twice the negative log-likelihood plus the number of parameters (see Slide 21 Topic 2)
+$$
+\text{AIC} = 2 (-\ell(\boldsymbol{\theta}, \phi; \boldsymbol{y}) + p)
+$$
+but again as we are using a penalised likelihood we replace the number of parameters $p$ with the effective degrees of freedom 
+$$
+\text{AIC} = 2 (-\ell(\boldsymbol{\theta}, \phi; \boldsymbol{y}) + EDF)
+$$
+As before, the model with the lower AIC is better. We can extract the AIC's from the models with and without the seasonal component to see which one is better using the `AIC()` function
+```{r}
+# Extract the model AIC
+AIC(Amodel3)
+AIC(Amodel4)
+
+# Doing it by hand 
+as.numeric(2*(-logLik(Amodel3) + sum(Amodel3$edf)))
+as.numeric(2*(-logLik(Amodel4) + sum(Amodel4$edf)))
+```
+
+The AICs are near identical, and combining it with the above we can conclude that the models are basically the same so there is no point adding a seasonal component to our model. 
+
+
+
+
+
+

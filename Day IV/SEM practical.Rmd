@@ -1,0 +1,172 @@
+---
+title: "SEM practical"
+author: 
+- "Oscar Rodriguez de Rivera"
+- "University of Exeter"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Structural equation modeling (SEM) is a model selection approach to path analysis that either includes latent variables or statistically compares different path models with the goal of comparing different causal hypotheses and examining indirect effects. I think these are best understood through visualization, in fact the heuristic visualization provided by a path diagram is a strength of the approach.
+
+```{r}
+library(lavaan)
+library(lavaanPlot)
+library(piecewiseSEM)
+library(tidyverse)
+
+set.seed(2002)
+```
+
+Here we will simulate data of caterpillar richness measured over 60 years. First I simulate that temperature is increasing. Then I simulate that caterpillar richness is declining as a function of both temperature and year. Then I add a precip variable with no trends and no effect on caterpillars.
+
+```{r}
+## years
+years <- c(1:60)
+
+#precip variable
+precip <- rnorm(60, mean=100, sd=10)
+
+## simulate the increasing temperature anomolies
+temperature <-  .05 + .05*years + rnorm(length(years),1,.5)
+plot(temperature ~ years,pch=19); abline(lm(temperature ~ years),lty=2)
+```
+```{r}
+## simulate the caterpillar richness as a function of years and temps
+catrich <-  350 -2*years -50*temperature + rnorm(length(years),50,50)
+plot(catrich ~ years,pch=19); abline(lm(catrich ~ years),lty=2)
+```
+Now lets run an SEM. First we combine the simulated vectors to create one dataset. Then we need to write a model statement. Finally we run the model using sem() and plot it using lavaanPlot(). You can examine the model using summary, however I will not here because the output is overwhelming.
+
+```{r}
+semdata <- cbind(catrich, years, temperature, precip)
+```
+
+```{r}
+cov(semdata)
+```
+
+```{r}
+model1 <- 'precip ~ years
+    catrich ~ years 
+    catrich ~ temperature
+    temperature ~ years'
+
+fit1 <- sem(model1, data = semdata)
+```
+
+```{r}
+summary(fit1,rsq = T, fit.measures = TRUE, standardized = TRUE)
+```
+
+#### Model Fit Estimates
+
+The general goal of SEM is to identify a set of maximally likely population parameters given a) the variances and covariances of the observed data and b) several user-specified paths thought to give rise to said variances and covariances. Thus, model fit is based on the comparison of the observed variance-covariance matrix and model-implied covariance matrix. If the model is an accurate representation of the patterns among the data, the variance-covariance matrix using the estimated parameters should match the variance-covariance of the sample or observed matrix.
+
+A. Estimator Methods
+
+• Indicates the Maximum Liklihood (ML) was used to estimate parameters. still fuzzy on ML? click here.
+
+• the optimizer that was used to find the best fitting parameter values for this estimator (here: NLMINB)
+• the number of model parameters (here: 8). 4 estimates for regression parameters + 1 estimate for convariance + 3 estimates for variances = 8 parameters
+
+B. Model Test User Model
+
+This is the section describing the fitted model. Values in this section are reported in publications for model fit (e.g., χ2 = 2.3, p=0.128, df=1)
+
+•Test statistic for the model that was specified by the user/ the fitted model. Here, the test statistic calculated is a Chi-squared test statistic and represents the observed Chi-square value for the fitted model.
+•Degrees of freedom for the fitted (n=1 because df fro the model= (number of covariances) - (number of parameters)
+•p-value for the fitted model. Model significance was tested from Chi-square null hypothesis test. The null hypothesis is: the fitted model-implied covariance matrix and the observed sample covariance matrix are equal. If our specified model was “good” we would accept that null hypothesis. If the specified model is poor fit for the the data, then we would reject the null. Simply put, a high p-value is desired because its structure properly represents relationships in the data.
+
+C. Model Test Baseline Model
+
+The baseline model represents a null model whereby your observed variables are constrained to covary with no other variables- covariances are fixed to 0 such that only variances are estimated in the covariance matrix. It represents a poor fitting mode. This is tested against your fitted model.
+
+• minimum function test statistic is the test statistic for the null model (chi-square value)
+
+• degrees of freedom for the null model
+• p-value for the null model compared to the fitted model.
+
+D-G) More model fit statistics
+
+A bunch of other model fit statistics. Beyond the scope of this lesson. In the spirit of somewhat arbitrary cut-offs: RMSEA less than 0.05, CFI/TLI above 0.90 to 0.95, and SRMR less than 0.08 are accepted as indicators of “good fit” refer to Hu and Bentler (1999).
+
+#### Parameter Estimates
+
+H. Regression Coefficients
+
+Values in this section get interpreted just like any other linear model. These are the path coefficients that are presented on the path diagrams.
+
+• Estimates: Contains the (estimated or fixed) parameter value for each model parameter. You have the option to report unstandardized estimates (these are reported under Estimate) or standardized estimates (reported under Std.all). Standardized are most useful for interpreting effects when neither predictors nor outcomes have natural scales and when gauging relative effect sizes across predictors on different scales. It is also an option to do partial stansdardization if you wish to say a one unit increase in the predictor leads to some increase in standard deviations of the response. If you wish for the output to give partial standardized coefficients use summary(fit, std.nox=TRUE, rsquare=TRUE). Example interpretation: The unstandardized coefficients for precip~years indicate that each year precipitation increases by -0.098 units. Using, standardized coefficients indicates that for every 1 standard deviation in year, precipitation decreases by -0.191 standard deviations.
+
+• Std.err: Contains the standard error for each estimated parameter
+
+• Z-value: contains the Wald statistic (which is simply obtained by dividing the parameter value by its standard error), and the last column (P(>|z|)) contains the p-value for testing the null hypothesis that the parameter equals zero in the population
+
+I, J) Variance Covariance Outputs
+
+In these sections it is important to note that a (.) before the variable term (e.g., .precip) indicates that it is a residual term. Also, variances and covariance can be displayed on the path diagram abd there are specific ways to illustrate those relationships, however, this information is often omitted from published path diagrams for simplification. Published path diagrams, in ecology, typically only include edges representing the regression coefficients.
+
+I. Covariances
+
+This section displays the covariance of the residuals among the endogenous variables (precip and catrich- the predicted variables/ those with arrows pointed to them). In our example the value can be interpreted as a negative association between the variance of precip and catrich that was not accounted for by the exogenous variables. As a default, lavaan allows all exogenous variables to covary but it fixes the residual covariances among endogenous variables to zero. The residual terms of stress precip and catrich are freed to covary within this section. Recall, to designate a covariance (or variance) we use the ~~ operator. Thus, .precip ~~ .catrich tells lavaan to include a residual covariance for precip and catrich. Note that values in the std.all column represents the correlation.
+
+J. Variances
+
+This section represents the residual variance of the endogenous variables precip, temp and catrich- the left-over variance that is not explained by the predictor(s). Notice that precip has a lot of unexplained variance 0.963 while catrich= 0.190 and temperature= 0.261 have much smaller residual variance. This makes sense since we modeled temp and catrich to vary with each other and years.
+
+K. R-squared
+The amount of total variance explained by the model for each variable. As we would expect, a lot of the variance in precip was not explained by the model. Had we modeled precip off of years then we would have expected a lot more variance in precip to be explained by the model.
+
+```{r}
+#summary(fit1, rsq = T, fit.measures = TRUE)
+
+lavaanPlot(name = "MODEL1", fit1, labels = semdata, coefs = TRUE)
+```
+
+Here we see the relationships between all of the variables. In SEMs, path coefficients are the regressions coefficients standardized by the standard deviation of the predictor variable in the causal pathway.
+
+Before I move on to interpretation, is there something going on here that might impact interpretation of the model?
+
+Let’s scale our variables.
+
+```{r}
+semdata_scaled <- apply(semdata, MARGIN = 2, scale)
+
+model2 <- 'precip ~ years
+    catrich ~ years 
+    catrich ~ temperature
+    temperature ~ years'
+
+fit2 <- sem(model2, data = semdata_scaled)
+#summary(fit2, rsq = T, fit.measures = TRUE)
+
+lavaanPlot(name = "MODEL2", fit2, labels = semdata_scaled, coefs = TRUE)
+```
+
+SEM is especially powerful when we use them to test different hypotheses and perform model comparison. This next model does not model a trend in caterpillars over time. We can then perform model comparison using AIC or some other metric.
+
+```{r}
+semdata_scaled <- apply(semdata, MARGIN = 2, scale)
+
+model3 <- 'precip ~ years
+    catrich ~ temperature
+    temperature ~ years'
+
+fit3 <- sem(model3, data = semdata_scaled)
+#summary(fit3, rsq = T, fit.measures = TRUE)
+
+lavaanPlot(name = "MODEL3", fit3, labels = semdata_scaled, coefs = TRUE)
+```
+
+```{r}
+AIC(fit1, fit2, fit3)
+```
+
+Our second model appears to be the best, so let’s take a closer look. We can see that years has a positive effects on temperature, which is to say that temperature is increasing over time. We can also see that temperature has a direct negative effect on caterpillar richness. There is a also slight negative trend richness over time after accounting for temperature change and a slight negative trend in precip. The precip result should be interpreted with caution, as we did not simulate a relationship between precip and year. In fact if you look at the model output, the is no reason to suspect this is not due to random noise (high p-value).
+
+Now for the indirect effect. We only have on in this model, it is the impact of year on caterpillar richness that is mediated by temperature change. We can calculate the total effect by multiplying the path coefficients. So the total impact of year on caterpillars is (-0.32 + (0.86 * -0.6)), which is -0.836.
+
+Another note in SEMs is the interpretation of the of the chi squared p value. Here the null hypothesis is that our data match the model that we provide, so a higher p-value indicates better model fit. However, if you dive into the regression coefficients, these p-values should be interpreted like any other from a linear model.

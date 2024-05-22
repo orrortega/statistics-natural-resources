@@ -1,0 +1,213 @@
+---
+title: "SEM"
+author: 
+- "Oscar Rodriguez de Rivera, PhD"
+- "University of Exeter"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Structural equation modeling (SEM) is among the fastest growing statistical techniques in ecology and evolution, and provides a new way to explore and quantify ecological systems. SEM unites multiple variables in a single causal network, thereby allowing simultaneous tests of multiple hypotheses. The idea of causality is central to SEM as the technique implicitly assumes that the relationships among variables represent causal links. Because variables can be both predictors and responses, SEM is also a useful tool for quantifying both direct and indirect (cascading) effects.
+
+Piecewise SEM (or confirmatory path analysis) expands upon traditional SEM by introducing a flexible mathematical framework that can incorporate a wide variety of model structures, distributions, and assumptions. These include: interactions and non-normal responses, random effects and hierarchical models, and alternate correlation structures (including phylogenetic, spatial, and temporal).
+
+This release is version 2.0 of the package and contains substantial updates to both the syntax and the underlying calculations. All functions have been replaced and rewritten from the ground up. 
+
+The first part of this vignette will briefly introduce the concepts behind piecewise SEM. The second part will introduce the new syntax using a worked example. The final part will briefly compare the old and new versions of the package.
+
+## 1. An Introduction to Structural Equation Modeling
+
+Broadly, structural equation modeling (SEM) unites a suite of variables in a single  network. They are generally presented using box-and-arrow diagrams denoting directed (causal) relationships among variables:
+
+Those variables that exist only as predictors in the network are referred to as exogenous, and those that are predicted (at any point) as endogenous. Exogenous variables therefore only ever have arrows coming out of them, while endogenous arrows have arrows coming into them (which does not preclude them from having arrows come out of them as well). This vocabulary is important when considering some special cases later.
+
+In traditional SEM, the relationships among variables (i.e., their linear coefficients) are estimated simultaneously in a single variance-covariance matrix. This approach is well developed but can be computationally intensive (depending on the sizes of the v-cov matrix) and additionally assumes independence and normality of errors, two assumptions that are generally violated in ecological research.
+
+Piecewise structural equation modeling (SEM), also called confirmatory path analysis, was proposed in the early 2000s by Bill Shipley as an alternate approach to traditional variance-covariance based SEM. In piecewise SEM, each set of relationships is estimated independently (or locally). This process decomposes the network  into the corresponding simple or multiple linear regressions for each response, each of which are evaluated separately, and then combined later to generate inferences about the entire SEM. This approach has two consequences: 
+1. Increasingly large networks can be estimated with ease compared to a single vcov matrix (because the approach is modularized), and 
+2. Specific assumptions about the distribution and covariance of the responses can be addressed using typical extensions of linear regression, such as fixed covariance structures, random effects, and other sophisticated modeling techniques. 
+
+Unlike traditional SEM, which uses a $\chi^2$ test to compare the observed and predicted covariance matrices, the goodness-of-fit of a piecewise structural equation model is obtained using 'tests of directed separation.' These tests evaluate the assumption that the specific causal structure reflects the data. This is accomplished by deriving the 'basis set,' which is the smallest set of independence claims obtained from the SEM. These claims are relationships that are *un*specified in the model, in other words paths that could have been included but were omitted because they were deemed to be biologically or mechanistically insignificant. The tests ask whether these relationships can truly be considered independent (i.e., their association is not statistically significant within some threshold of acceptable error, typically $\alpha$=0.05) or whether  some causal relationship may exist as indicated by the data.
+
+For instance, the preceding example SEM contains 4 specified paths (solid, black) and 2 unspecified paths (dashed, red), the latter of which constitute the basis set:
+
+In this case, there are two relationships that need to be evaluated: `y3` and `x1`, and `y3` and `y2`. However, there are additional influences on `y3`, specifically the directed path from `y2`. Thus, the claims need to be evaluated for 'conditional independence,' i.e. that the two variables are independent *conditional* on the already specified influences on both of them. This also pertains to the predictors of `y2`,  including the potential contributions of `x1`. So the full claim would be: `y2 | y3 (y1, x1)`, with the claim of interest separated by the `|` bar and the conditioning variable(s) following in parentheses.
+
+As the network grows more complex, however, the independence claims only consider variables that are *immediately ancestral* to the primary claim (i.e., the parent nodes). For example, if there was another variable predicting `x1`, it would not be considered in the independence claim between `y3` and `y2` since it is >1 node away in the network.
+
+The independence claims are evaluated by fitting a regression between the two variables of interest with any conditioning variables included as covariates. Thus, the claim above `y2 | y3 (y1, x1)` would be modeled as `y3 ~ y2 + y1 + x1` . These regressions are constructed using the same assumptions about `y3` as specified in the actual structural equation model. So, for instance, if `y3` is a hierarchically sampled variable predicted by `y1`, then same hierarchical structure would carry over to the test of directed separation of `y3` predicted by `y2`.
+
+The P-values of the conditional independence tests are then combined in a single Fisher's C statistic using the following equation:
+
+  $$C = -2\sum_{i=1}^{k}ln(p_{i})$$
+
+This statistic is $\chi^2$-distributed with 2k degrees of freedom, with k being the number of independence claims in the basis set.
+
+Shipley (2013) also showed that the the C statistic can be used to compute an AIC score for the SEM, so that nested comparisons can be made in a model selection framework:
+
+  $$AIC = C + 2K$$
+  
+where K is the likelihood degrees of freedom. A further variant, $AIC_c$, can be obtained by adding an additional penalty based on sample size:
+
+  $$AIC_c = C + 2K\frac{n}{(n - K - 1)}$$
+  
+The `piecewiseSEM` package automates the derivation of the basis set and the tests of directed separation, as well as extraction of path coefficients based on the user-specified input.
+
+## 2. An Example using piecewiseSEM
+
+### 2.1 Worked example
+
+Let's make up some fake data corresponding to the path diagram above:
+```{r}
+dat <- data.frame(x1 = runif(50), y1 = runif(50), y2 = runif(50), y3 = runif(50))
+```
+
+And we will use `piecewiseSEM` to fit the model. The primary function is `psem` and we supply the regressions corresponding to the relationships specified in the path diagram, separated by commas as in a `list`:
+
+```{r, error = T}
+# Load required libraries
+library(piecewiseSEM)
+model <- psem(lm(y1 ~ x1, dat), lm(y1 ~ y2, dat), lm(y2 ~ x1, dat), lm(y3 ~ y1, dat))
+```
+
+You'll note that this formulation produces an error because we have incorrectly broken down the component regressions. A common mistake is to list each path separately, but the proper specification is to collapse multiple pathways into a single multiple regression if the response is the same. Thus, the properly specified SEM becomes:
+
+```{r}
+model <- psem(lm(y1 ~ x1 + y2, dat), lm(y2 ~ x1, dat), lm(y3 ~ y1, dat))
+```
+
+To evaluate the model, we call `summary` on the `psem` object.
+```{r}
+summary(model, .progressBar = F)
+```
+
+The output should be familiar to anyone who has evaluated a linear model in R previously.
+
+It shows the call of the model (the component equations), the AIC and BIC scores (derived from that C statistic), and then the tests of directed separation. The last column of the table reports the P-values, which are summarized using the above equation to yield the global goodness-of-fit below. The next table reports the path coefficients, including the standardized values (scaled by standardized deviations). Finally, the individual R-squared values of each regression is given, to aid in evaluation of the model fit.
+
+### 2.2 GLMs in pSEM
+
+A problematic case arises when intermediate endogenous variables are non-normally distributed. Consider the following SEM:
+
+In this SEM, there are two independence claims:
+
+(1) y3 | x1 (y1, y2)
+
+(2) y2 | y1 (x1)
+
+Considering the second independence claim, in a Gaussian world, the significance value is the same whether the test is conducted as y2 | y1 (x1) or y1 | y2 (x1). This is NOT true, however, when one or both of the variables are modeled using a generalized linear model (GLM) fit to a non-normal distribution. This is because the response is now transformed via the link function (see Section 2.2). This transformations means the P-value obtained by regressing y1 against y2 is NOT the same as the one obtained by regressing y2 against y1.
+
+The following example will show this is the case:
+```{r, messages = F}
+# Generate fake data
+glmdat <- data.frame(x1 = runif(50), y1 = rpois(50, 10), y2 = rpois(50, 50), y3 = runif(50))
+# Extract P-values
+summary(lm(y1 ~ y2 + x1, glmdat))$coefficients[2, 4]
+summary(lm(y2 ~ y1 + x1, glmdat))$coefficients[2, 4]
+# Repeat but model y1 and y2 and Poisson-distributed
+summary(glm(y1 ~ y2 + x1, "poisson", glmdat))$coefficients[2, 4]
+summary(glm(y2 ~ y1 + x1, "poisson", glmdat))$coefficients[2, 4]
+```
+
+This effect is problematic because the d-sep tests are wholly dependent on the significance value. If the P-value is biased based on the direction of the test, then the goodness-of-fit of the model can be over- or underestimated.
+
+`piecewiseSEM` version 2.0 solves this by providing three options to the user. 
+
+(1) One can specify the directionality of the test if, for instance, it makes greater biological sense to test `y1` against `y2` instead of the reverse.
+
+(2) One can remove that path from the basis set and instead specify it as a correlated error using `%~~%`.
+
+(3) One can conduct both tests and choose the most conservative (i.e., lowest) P-value.
+
+These options are returned by `summary` in the event the above scenario is identified in the SEM:
+```{r, error = T}
+# Generate fake data
+glmdat <- data.frame(x1 = runif(50), y1 = rpois(50, 10), y2 = rpois(50, 50), y3 = runif(50))
+# Construct SEM
+glmsem <- psem(
+  glm(y1 ~ x1, "poisson", glmdat),
+  glm(y2 ~ x1, "poisson", glmdat),
+  lm(y3 ~ y1 + y2, glmdat)
+)
+summary(glmsem)
+```
+In option 1, the directionality can be specified using `direction = c()` as an additional argument.
+```{r}
+summary(glmsem, direction = c("y1 <- y2"), .progressBar = F)$dTable
+```
+In option 2, the SEM can be updated to remove that test by specifying it as a correlated error (see Section 2.4).
+```{r}
+summary(update(glmsem, y1 %~~% y2), .progressBar = F)
+```
+Note that the claim no longer appears in the section for the tests of directed separation.
+
+Finally, option 3 can be invoked by specifying `conserve = T` as an additional argument
+```{r}
+summary(glmsem, conserve = T, .progressBar = F)$dTable
+```
+
+The user should be vigilant for these kinds of situations and ensure that both the specified paths AND the independence claims all make biological sense. In the case where the underlying assumptions of the d-sep tests can bias the goodness-of-fit statistic, `piecewiseSEM` should automatically alert the user.
+
+### 2.3 Correlated errors
+
+Correlated errors reflect the situation where the relationship among the two variables is not presumed to be causal and unidirectional, but rather that both are being driven by some underlying driver and are therefore *appear* correlated. 
+
+Such a relationship is denoted by using a double-headed arrow:
+
+This behavior is specified in `piecewiseSEM` using the new operator `%~~%` in the `psem` function. We can fit the above SEM:
+```{r}
+cordat <- data.frame(x1 = runif(50), y1 = runif(50), y2 = runif(50), y3 = runif(50))
+corsem <- psem(
+  lm(y1 ~ x1, cordat),
+  lm(y2 ~ x1, cordat),
+  y1 %~~% y2, 
+  lm(y3 ~ y1 + y2, cordat)
+)
+summary(corsem, .progressBar = F)
+```
+
+In the case where the correlated error occurs between two exogenous variables, it is simply the raw bivariate correlation whose P-value is determined using modifications to the function `cor.test`. In the event the correlated error includes an endogenous variable, it is the partial correlation that removes the effect of any covariates.
+
+In the above example, the correlated error removes the influence of `x1` on both `y1` and `y2` before computing their correlation.
+```{r}
+cor(resid(lm(y1 ~ x1, cordat)), resid(lm(y2 ~ x1, cordat)))
+cerror(y1 %~~% y2, corsem)
+```
+
+### 2.4 Nested models and AIC
+
+
+Let's consider comparing the following models for the mediating role of `y1`:
+
+
+One might think that the models could be coded like this, and then compared:
+```{r, message = F, results = 'hide'}
+AICdat <- data.frame(x1 = runif(50), y1 = runif(50), y2 = runif(50), y3 = runif(50))
+sem1 <- psem(
+  lm(y1 ~ x1, AICdat),
+  lm(y2 ~ y1, AICdat),
+  lm(y3 ~ y2, AICdat)
+)
+sem2 <- psem(
+  lm(y1 ~ x1, AICdat),
+  lm(y2 ~ y1, AICdat)
+)
+AIC(sem1, sem2)
+```
+
+However, this does not account for the potential missing relationships with `y3` to be in the model, which is critical as AIC incorporates Fisher's C, which is determined by the d-sep tests. `y3` must be present in the d-sep tests to make the comparison fair (i.e., the models must be nested). 
+
+
+To do so, we can use the following syntax:
+
+```{r}
+sem2new <- update(sem2, y3 ~ 1)
+AIC(sem1, sem2new)
+```
+
+Now the comparison is fair and the model selection procedure is robust. 
+
+
+
