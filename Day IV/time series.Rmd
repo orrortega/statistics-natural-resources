@@ -1,0 +1,200 @@
+---
+title: "Extended Time Series Analysis in R"
+author: "O. Rodriguez de Rivera Ortega, PhD | University of Exeter"
+date: "2025-05-21"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(forecast)
+library(TTR)
+library(datasets)
+```
+
+# Introduction to Time Series
+
+cat("A time series is a set of observations recorded sequentially over
+time, typically at regular intervals.\n") cat("Time series analysis aims
+to understand underlying structure and forecast future values.\n")
+cat("Key components include:\n") cat("- Trend: long-term movement\n")
+cat("- Seasonality: systematic variation at fixed periods\n") cat("-
+Noise: random irregular variation\n")
+
+# Moving Average Example
+
+cat("\nWe apply a 3-point moving average to rainfall data to smooth
+fluctuations and observe the trend.\n")
+
+```{r}
+rain <- scan("http://robjhyndman.com/tsdldata/hurst/precip1.dat", skip=1)
+rainseries <- ts(rain, start=c(1813))
+rainseriesSMA3 <- SMA(rainseries, n=3)
+plot.ts(rainseriesSMA3, main="3-Point Moving Average")
+
+cat("Output: The plot displays a smoothed version of the rainfall time series, which helps highlight long-term trends.\n")
+```
+
+# Autocorrelation and Partial Autocorrelation
+
+cat("\nAutocorrelation measures correlation with lagged versions of
+itself.\n") cat("Partial autocorrelation shows the direct correlation at
+a given lag after controlling for intermediate lags.\n")
+
+```{r}
+acf(rainseries, lag.max=20, main="ACF of Rainfall Series")
+pacf(rainseries, lag.max=20, main="PACF of Rainfall Series")
+
+cat("Output: Spikes outside the blue bounds indicate statistically significant autocorrelations. Useful for ARIMA modeling.\n")
+```
+
+# Seasonal Time Series: CO2
+
+cat("\nWe use the built-in CO2 dataset, which records monthly
+atmospheric CO₂ concentrations.\n")
+
+```{r}
+ppmtimeseries <- ts(co2, frequency=12, start=c(1959))
+plot.ts(ppmtimeseries, main="Monthly CO2 Levels at Mauna Loa")
+
+cat("Output: This time series shows a clear upward trend and recurring seasonal fluctuations.\n")
+```
+
+# Decomposition of CO2
+
+cat("\nDecomposition separates the time series into trend, seasonal, and
+residual components.\n")
+
+```{r}
+ppmtimeseriescomponents <- decompose(ppmtimeseries)
+plot(ppmtimeseriescomponents)
+
+cat("Output: The trend component shows long-term growth, seasonal shows repetitive yearly changes, and the remainder is noise.\n")
+```
+
+# Seasonal Adjustment
+
+cat("\nSeasonal adjustment removes the seasonal component to better
+analyze the underlying trend and irregularities.\n")
+
+```{r}
+ppmtimeseriesadjusted <- ppmtimeseries - ppmtimeseriescomponents$seasonal
+plot(ppmtimeseriesadjusted, main="Seasonally Adjusted CO₂ Series")
+
+cat("Output: This adjusted series highlights the trend and irregular movements without seasonal interference.\n")
+```
+
+# Exponential Smoothing
+
+cat("\nExponential smoothing applies weights that decrease exponentially
+to past data.\n") cat("We use Holt-Winters smoothing without trend or
+seasonal components.\n")
+
+```{r}
+rainseriesforecast <- HoltWinters(rainseries, beta=FALSE, gamma=FALSE)
+plot(rainseriesforecast)
+
+cat("Output: The fitted line smooths the rainfall series by responding more to recent values.\n")
+```
+
+# Forecasting
+
+cat("\nWe forecast 8 future values using the exponential smoothing
+model.\n")
+
+```{r}
+rainforecast <- forecast(rainseriesforecast, h=8)
+plot(rainforecast)
+
+cat("Output: Forecasts are shown with 80% and 95% prediction intervals.\n")
+```
+
+# Residual Diagnostics
+
+cat("\nWe examine residuals to check if the model captured all
+information.\n")
+
+```{r}
+# Residual diagnostics (handle NAs safely)
+clean_residuals <- na.omit(rainforecast$residuals)
+
+acf(clean_residuals, lag.max = 20)
+Box.test(clean_residuals, lag = 20, type = "Ljung-Box")
+plot.ts(clean_residuals, main = "Residuals (NA removed)")
+
+cat("Output: If residuals show no significant autocorrelation (ACF within bounds, high p-value), the model is adequate.\n")
+```
+
+# Forecast Error Distribution
+
+cat("\nWe compare residual distribution to a normal distribution.\n")
+
+```{r}
+plotForecastErrors <- function(forecasterrors) {
+  mybinsize <- IQR(forecasterrors, na.rm=TRUE)/4
+  mysd <- sd(forecasterrors, na.rm=TRUE)
+  mymin <- min(forecasterrors, na.rm=TRUE) - mysd*5
+  mymax <- max(forecasterrors, na.rm=TRUE) + mysd*3
+  mynorm <- rnorm(10000, mean=0, sd=mysd)
+  mybins <- seq(min(mymin, min(mynorm)), max(mymax, max(mynorm)), mybinsize)
+  hist(forecasterrors, col="red", freq=FALSE, breaks=mybins)
+  myhist <- hist(mynorm, plot=FALSE, breaks=mybins)
+  points(myhist$mids, myhist$density, type="l", col="blue", lwd=2)
+}
+plotForecastErrors(rainforecast$residuals)
+
+cat("Output: The red histogram (residuals) should closely match the blue normal curve if residuals are normally distributed.\n")
+```
+
+# ARIMA Example: Volcanic Dust Index
+
+cat("\nWe analyze the annual Volcanic Dust Index from 1500 onward.\n")
+
+```{r}
+volcanodust <- scan("http://robjhyndman.com/tsdldata/annual/dvi.dat", skip=1)
+volcanodustseries <- ts(volcanodust, start=c(1500))
+plot.ts(volcanodustseries, main="Volcanic Dust Index")
+
+cat("Output: The plot shows irregular spikes due to major volcanic events. The series is fairly stationary.\n")
+```
+
+# ACF/PACF for ARIMA
+
+cat("\nWe use ACF and PACF to identify ARIMA structure.\n")
+
+```{r}
+acf(volcanodustseries, lag.max=20)
+pacf(volcanodustseries, lag.max=20)
+
+cat("Output: Significant lags help determine AR and MA orders. For example, 2 significant lags in PACF suggests AR(2).\n")
+```
+
+# Fit ARIMA and Forecast
+
+cat("\nWe fit an ARIMA(2,0,0) model and forecast 31 future values.\n")
+
+```{r}
+volcano_arima <- arima(volcanodustseries, order=c(2,0,0))
+volcano_forecast <- forecast(volcano_arima, h=31)
+plot(volcano_forecast)
+
+cat("Output: The forecast shows expected dust levels and confidence intervals for the next 31 years.\n")
+```
+
+# ARIMA Residual Check
+
+cat("\nWe check residuals from the ARIMA model to assess goodness of
+fit.\n")
+
+```{r}
+acf(volcano_forecast$residuals, lag.max=20)
+Box.test(volcano_forecast$residuals, lag=20, type="Ljung-Box")
+plotForecastErrors(volcano_forecast$residuals)
+
+cat("Output: Ideally, no autocorrelation and residuals are normally distributed. If so, ARIMA fit is adequate.\n")
+```
+
+
